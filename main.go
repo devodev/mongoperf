@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	// parse flags
 	var uri string
 	flag.StringVar(&uri, "uri", "", "mongodb URI connection string")
 	flag.Parse()
@@ -16,6 +16,10 @@ func main() {
 		uri = "mongodb://localhost:27017"
 	}
 
-	client := Client{uri}
-	log.Fatal(client.RunDemo(context.TODO(), "test", "trainers"))
+	logger := logrus.New()
+	client := Client{uri, logger}
+
+	if err := client.RunDemo(context.TODO(), "test", "trainers"); err != nil {
+		logger.Fatal(err)
+	}
 }

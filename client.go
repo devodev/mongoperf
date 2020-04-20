@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
 
+	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -18,7 +18,8 @@ type Trainer struct {
 
 // Client .
 type Client struct {
-	uri string
+	uri    string
+	logger *logrus.Logger
 }
 
 // RunDemo .
@@ -42,12 +43,12 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	defer func() {
 		err = client.Disconnect(context.TODO())
 		if err != nil {
-			log.Println(err)
+			c.logger.Println(err)
 		}
-		log.Println("Connection to MongoDB closed.")
+		c.logger.Println("Connection to MongoDB closed.")
 	}()
 
-	log.Println("Connected to MongoDB!")
+	c.logger.Println("Connected to MongoDB!")
 
 	// Get a collection
 	collection := client.Database(db).Collection(col)
@@ -62,7 +63,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("Inserted a single document: ", insertResult.InsertedID)
+	c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
 
 	// Insert multiple
 	trainers := []interface{}{misty, brock}
@@ -70,7 +71,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
+	c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
 
 	// Update one
 	filter := bson.D{{Key: "name", Value: "Ash"}}
@@ -79,7 +80,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+	c.logger.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
 
 	// Find one
 	var result Trainer
@@ -87,7 +88,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Found a single document: %+v\n", result)
+	c.logger.Printf("Found a single document: %+v\n", result)
 
 	// Find multiple
 	// Pass these options to the Find method
@@ -124,13 +125,13 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	// Close the cursor once finished
 	cur.Close(context.TODO())
 
-	log.Printf("Found multiple documents (array of pointers): %+v\n", results)
+	c.logger.Printf("Found multiple documents (array of pointers): %+v\n", results)
 
 	// Delete all
 	deleteResult, err := collection.DeleteMany(context.TODO(), bson.D{{}})
 	if err != nil {
 		return err
 	}
-	log.Printf("Deleted %v documents in the trainers collection\n", deleteResult.DeletedCount)
+	c.logger.Printf("Deleted %v documents in the trainers collection\n", deleteResult.DeletedCount)
 	return nil
 }
