@@ -99,34 +99,108 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) error {
 	c.logger.Printf("using collection: %v", *s.Collection)
 
 	for idx, query := range s.Queries {
-		c.logger.Printf("running query #%d: %q", idx+1, *query.Name)
-		c.runQuery(ctx, collection, query)
+		c.logger.Printf("running query #%d", idx+1)
+		err := c.runQuery(ctx, collection, query)
+		if err != nil {
+			c.logger.Error(err)
+		}
 	}
 	return nil
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
+	c.logger.Printf("scenario name: %v", *q.Name)
+	c.logger.Printf("scenario action: %v", *q.Action)
+
 	switch a := q.Action; {
 	default:
 		return fmt.Errorf("scenario action not supported: %v", a)
 	case *a == "InsertOne":
-		doc := q.Meta.Payload
+		data := q.Meta.Payload
+		if data == nil {
+			return fmt.Errorf("Meta is nil")
+		}
 
-		c.logger.Printf("inserting: %+v", doc)
-		insertResult, err := collection.InsertOne(ctx, doc)
+		c.logger.Printf("inserting: %+v", data)
+		insertResult, err := collection.InsertOne(ctx, data)
 		if err != nil {
 			return err
 		}
 		c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
 	case *a == "InsertMany":
-		docs := q.Meta.PayloadList
+		data := q.Meta.PayloadList
+		if data == nil {
+			return fmt.Errorf("Meta is nil")
+		}
 
-		c.logger.Printf("inserting: %+v", docs)
-		insertManyResult, err := collection.InsertMany(ctx, docs)
+		c.logger.Printf("inserting: %+v", data)
+		insertManyResult, err := collection.InsertMany(ctx, data)
 		if err != nil {
 			return err
 		}
 		c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
+	case *a == "UpdateOne":
+		data := q.Meta.Payload
+		if data == nil {
+			return fmt.Errorf("Meta is nil")
+		}
+
+		filter, ok := data["Filter"]
+		if !ok {
+			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		}
+		update, ok := data["Update"]
+		if !ok {
+			return fmt.Errorf("Update attribute is mandatory in Payload")
+		}
+		c.logger.Printf("update filter: %+v", filter)
+		c.logger.Printf("update payload: %+v", update)
+
+		updateResult, err := collection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			return err
+		}
+		c.logger.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+	case *a == "FindOne":
+		data := q.Meta.Payload
+		if data == nil {
+			return fmt.Errorf("Meta is nil")
+		}
+
+		var result map[string]interface{}
+		err := collection.FindOne(ctx, data).Decode(&result)
+		if err != nil {
+			return err
+		}
+		c.logger.Printf("Found a single document: %+v\n", result)
+	case *a == "Find":
+		data := q.Meta.Payload
+		if data == nil {
+			return fmt.Errorf("Meta is nil")
+		}
+
+		findOptions := options.Find()
+		// findOptions.SetLimit(2)
+
+		cur, err := collection.Find(ctx, data, findOptions)
+		if err != nil {
+			return err
+		}
+		defer cur.Close(ctx)
+
+		var results []interface{}
+		for cur.Next(ctx) {
+			var elem interface{}
+			err := cur.Decode(&elem)
+			if err != nil {
+				return err
+			}
+			results = append(results, &elem)
+		}
+		if err := cur.Err(); err != nil {
+			return err
+		}
+		c.logger.Printf("Found multiple documents (array of pointers): %+v\n", results)
 	}
 	return nil
 }
