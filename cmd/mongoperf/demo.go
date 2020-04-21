@@ -35,7 +35,7 @@ func newCommandDemo() *cobra.Command {
 			logger.Printf("using database: %v", db)
 			logger.Printf("using collection: %v", collection)
 
-			client := mongodb.New(uri, mongodb.WithLogger(logger))
+			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
 			if err := client.RunDemo(context.TODO(), db, collection); err != nil {
 				logger.Fatal(err)

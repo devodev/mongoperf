@@ -32,7 +32,7 @@ func newCommandScenario() *cobra.Command {
 			}
 			logger.Printf("connecting to: %v", uri)
 
-			client := mongodb.New(uri, mongodb.WithLogger(logger))
+			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
 			if err := client.RunScenario(context.TODO(), scenario.Scenario); err != nil {
 				logger.Fatal(err)

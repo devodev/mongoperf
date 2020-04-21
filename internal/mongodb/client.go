@@ -11,20 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Scenario .
-type Scenario struct {
-	Database   *string
-	Collection *string
-	Queries    []*ScenarioQuery
-}
-
-// ScenarioQuery .
-type ScenarioQuery struct {
-	Name   *string
-	Action *string
-	Meta   map[string]interface{}
-}
-
 // Client .
 type Client struct {
 	uri    string
@@ -44,8 +30,8 @@ func WithLogger(l *logrus.Logger) func(c *Client) {
 	return func(c *Client) {}
 }
 
-// New returns a new Client using the provided URI.
-func New(uri string, options ...Option) *Client {
+// NewClient returns a new Client using the provided URI.
+func NewClient(uri string, options ...Option) *Client {
 	c := &Client{uri: uri}
 	for _, opt := range options {
 		opt(c)
@@ -79,6 +65,20 @@ func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, erro
 		return nil
 	}
 	return client, close, nil
+}
+
+// Scenario .
+type Scenario struct {
+	Database   *string
+	Collection *string
+	Queries    []*ScenarioQuery
+}
+
+// ScenarioQuery .
+type ScenarioQuery struct {
+	Name   *string
+	Action *string
+	Meta   map[string]interface{}
 }
 
 // RunScenario .
