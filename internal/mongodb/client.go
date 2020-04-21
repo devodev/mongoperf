@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
@@ -68,6 +69,43 @@ func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, erro
 	return client, close, nil
 }
 
+// Result .
+type Result struct {
+	Query *ScenarioQuery
+
+	Start       time.Time
+	End         time.Time
+	TotalChange int
+	Error       error
+}
+
+// NewResult .
+func NewResult(q *ScenarioQuery) *Result {
+	return &Result{
+		Query: q,
+		Start: time.Now(),
+		End:   time.Time{},
+	}
+}
+
+// WithError .
+func (r *Result) WithError(err error) *Result {
+	r.setEnd()
+	r.Error = err
+	return r
+}
+
+// WithResult .
+func (r *Result) WithResult(total int) *Result {
+	r.setEnd()
+	r.TotalChange = total
+	return r
+}
+
+func (r *Result) setEnd() {
+	r.End = time.Now()
+}
+
 // Scenario .
 type Scenario struct {
 	Database   *string
@@ -87,23 +125,15 @@ type ScenarioQuery struct {
 type ScenarioReport struct {
 	Error error
 
-	mu    *sync.Mutex
-	Query map[string]*ScenarioQuery
-
-	muResult         *sync.Mutex
-	QueryResult      map[string]interface{}
-	QueryResultError map[string]error
+	mu          *sync.Mutex
+	QueryResult map[string]*Result
 }
 
 // NewScenarioReport .
 func NewScenarioReport() *ScenarioReport {
 	return &ScenarioReport{
-		mu:    &sync.Mutex{},
-		Query: make(map[string]*ScenarioQuery),
-
-		muResult:         &sync.Mutex{},
-		QueryResult:      make(map[string]interface{}),
-		QueryResultError: make(map[string]error),
+		mu:          &sync.Mutex{},
+		QueryResult: make(map[string]*Result),
 	}
 }
 
@@ -112,21 +142,11 @@ func (r *ScenarioReport) SetError(err error) {
 	r.Error = err
 }
 
-// AddQuery .
-func (r *ScenarioReport) AddQuery(name string, q *ScenarioQuery) {
+// SetResult .
+func (r *ScenarioReport) SetResult(name string, res *Result) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.Query[name] = q
-}
-
-// SetResult .
-func (r *ScenarioReport) SetResult(name string, value interface{}, err error) {
-	r.muResult.Lock()
-	defer r.muResult.Unlock()
-	if _, ok := r.Query[name]; ok {
-		r.QueryResult[name] = value
-		r.QueryResultError[name] = err
-	}
+	r.QueryResult[name] = res
 }
 
 // RunScenario .
@@ -148,25 +168,24 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 		c.logger.Infof("query#%d name: %v", idx+1, *query.Name)
 		c.logger.Infof("query#%d action: %v", idx+1, *query.Action)
 
-		report.AddQuery(*query.Name, query)
-
-		err := c.runQuery(ctx, collection, query)
-		if err != nil {
-			c.logger.Error(err)
+		res := c.runQuery(ctx, collection, query)
+		if res.Error != nil {
+			c.logger.Error(res.Error)
 		}
-		report.SetResult(*query.Name, nil, err)
+		report.SetResult(*query.Name, res)
 	}
 	return report
 }
 
-func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
+func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) *Result {
+	result := NewResult(q)
 	switch a := q.Action; {
 	default:
-		return fmt.Errorf("scenario action not supported: %v", *a)
+		return result.WithError(fmt.Errorf("scenario action not supported: %v", *a))
 	case *a == "InsertOne":
 		payload := q.Meta
 		if payload == nil {
-			return fmt.Errorf("Meta is nil")
+			return result.WithError(fmt.Errorf("Meta is nil"))
 		}
 
 		type metaInsertOne struct {
@@ -176,10 +195,10 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		var meta metaInsertOne
 		if err := mapstructure.Decode(payload, &meta); err != nil {
-			return err
+			return result.WithError(err)
 		}
 		if len(meta.Data) == 0 {
-			return fmt.Errorf("Data is empty")
+			return result.WithError(fmt.Errorf("Data is empty"))
 		}
 		if meta.Options == nil {
 			meta.Options = options.InsertOne()
@@ -188,13 +207,14 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		insertResult, err := collection.InsertOne(ctx, meta.Data, meta.Options)
 		if err != nil {
-			return err
+			return result.WithError(err)
 		}
-		c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
+		c.logger.Infof("Inserted a single document: %v", insertResult.InsertedID)
+		return result.WithResult(1)
 	case *a == "InsertMany":
 		payload := q.Meta
 		if payload == nil {
-			return fmt.Errorf("Meta is nil")
+			return result.WithError(fmt.Errorf("Meta is nil"))
 		}
 
 		type metaInsertMany struct {
@@ -204,10 +224,10 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		var meta metaInsertMany
 		if err := mapstructure.Decode(payload, &meta); err != nil {
-			return err
+			return result.WithError(err)
 		}
 		if len(meta.Data) == 0 {
-			return fmt.Errorf("Data is empty")
+			return result.WithError(fmt.Errorf("Data is empty"))
 		}
 		if meta.Options == nil {
 			meta.Options = options.InsertMany()
@@ -216,13 +236,14 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		insertManyResult, err := collection.InsertMany(ctx, meta.Data, meta.Options)
 		if err != nil {
-			return err
+			return result.WithError(err)
 		}
-		c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
+		c.logger.Infof("Inserted multiple documents: %v", insertManyResult.InsertedIDs)
+		return result.WithResult(len(insertManyResult.InsertedIDs))
 	case *a == "UpdateOne":
 		payload := q.Meta
 		if payload == nil {
-			return fmt.Errorf("Meta is nil")
+			return result.WithError(fmt.Errorf("Meta is nil"))
 		}
 
 		type metaUpdateOne struct {
@@ -233,10 +254,10 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		var meta metaUpdateOne
 		if err := mapstructure.Decode(payload, &meta); err != nil {
-			return err
+			return result.WithError(err)
 		}
 		if len(meta.Data) == 0 {
-			return fmt.Errorf("Data is empty")
+			return result.WithError(fmt.Errorf("Data is empty"))
 		}
 		if meta.Options == nil {
 			meta.Options = options.Update()
@@ -245,13 +266,14 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		updateResult, err := collection.UpdateOne(ctx, meta.Filter, meta.Data, meta.Options)
 		if err != nil {
-			return err
+			return result.WithError(err)
 		}
-		c.logger.Infof("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+		c.logger.Infof("Matched %v documents and updated %v documents", updateResult.MatchedCount, updateResult.ModifiedCount)
+		return result.WithResult(int(updateResult.ModifiedCount))
 	case *a == "FindOne":
 		payload := q.Meta
 		if payload == nil {
-			return fmt.Errorf("Meta is nil")
+			return result.WithError(fmt.Errorf("Meta is nil"))
 		}
 
 		type metaFindOne struct {
@@ -261,23 +283,24 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		var meta metaFindOne
 		if err := mapstructure.Decode(payload, &meta); err != nil {
-			return err
+			return result.WithError(err)
 		}
 		if meta.Options == nil {
 			meta.Options = options.FindOne()
 		}
 		c.logger.Infof("query meta: %+v", meta)
 
-		var result map[string]interface{}
-		err := collection.FindOne(ctx, meta.Filter, meta.Options).Decode(&result)
+		var findResult map[string]interface{}
+		err := collection.FindOne(ctx, meta.Filter, meta.Options).Decode(&findResult)
 		if err != nil {
-			return err
+			return result.WithError(err)
 		}
-		c.logger.Infof("Found a single document: %+v\n", result)
+		c.logger.Infof("Found a single document: %+v", findResult)
+		return result.WithResult(1)
 	case *a == "Find":
 		payload := q.Meta
 		if payload == nil {
-			return fmt.Errorf("Meta is nil")
+			return result.WithError(fmt.Errorf("Meta is nil"))
 		}
 
 		type metaFindMany struct {
@@ -287,7 +310,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		var meta metaFindMany
 		if err := mapstructure.Decode(payload, &meta); err != nil {
-			return err
+			return result.WithError(err)
 		}
 		if meta.Options == nil {
 			meta.Options = options.Find()
@@ -296,7 +319,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 
 		cur, err := collection.Find(ctx, meta.Filter, meta.Options)
 		if err != nil {
-			return err
+			return result.WithError(err)
 		}
 		defer cur.Close(ctx)
 
@@ -305,16 +328,16 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			var elem interface{}
 			err := cur.Decode(&elem)
 			if err != nil {
-				return err
+				return result.WithError(err)
 			}
 			results = append(results, &elem)
 		}
 		if err := cur.Err(); err != nil {
-			return err
+			return result.WithError(err)
 		}
-		c.logger.Infof("Found multiple documents (array of pointers): %+v\n", results)
+		c.logger.Infof("Found multiple documents (array of pointers): %+v", results)
+		return result.WithResult(len(results))
 	}
-	return nil
 }
 
 // RunDemo .
@@ -325,7 +348,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	}
 	defer close()
 
-	c.logger.Println("Connected to MongoDB!")
+	c.logger.Infof("Connected to MongoDB!")
 
 	// Get a collection
 	collection := client.Database(db).Collection(col)
@@ -345,7 +368,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
+	c.logger.Infof("Inserted a single document: ", insertResult.InsertedID)
 
 	// Insert multiple
 	trainers := []interface{}{misty, brock}
@@ -353,7 +376,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
+	c.logger.Infof("Inserted multiple documents: ", insertManyResult.InsertedIDs)
 
 	// Update one
 	filter := bson.D{{Key: "name", Value: "Ash"}}

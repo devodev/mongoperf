@@ -2,12 +2,76 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"text/template"
+	"time"
 
 	"mongo-tester/internal/mongodb"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+)
+
+// Report .
+type Report struct {
+	Version    string
+	URI        string
+	Database   string
+	Collection string
+	Parallel   int
+	Queries    map[string]*Query
+}
+
+// Query .
+type Query struct {
+	Name   string
+	Action string
+	Result struct {
+		Successful  bool
+		TotalTime   time.Duration
+		TotalChange int
+		Error       error
+	}
+}
+
+var (
+	reportTemplate = `
+===============================
+  Scenario Report
+===============================
+  This report was produced
+  using mongoperf {{ .Version }}
+-------------------------------
+  Config
+-------------------------------
+  URI:       {{ .URI }}
+  Database   {{ .Database }}
+  Collection {{ .Collection }}
+  Parallel   {{ .Parallel }}
+-------------------------------
+  Queries
+-------------------------------
+{{ with .Queries -}}
+{{ range $name, $elem := . -}}
+{{ block "query" . }}{{ end }}
+{{- end }}
+{{- end }}
+===============================
+`
+
+	queryBlock = `
+{{ define "query" }}
+  > Name:        {{ .Name }}
+    Action:      {{ .Action }}
+    {{ with .Result -}}
+    Successful:  {{ .Successful }}
+    TotalTime:   {{ .TotalTime }}
+    TotalChange: {{ .TotalChange }}
+    Error:       {{ if .Error }}{{ .Error.Error }}{{ else }}nil{{ end }}
+    {{- end }}
+{{ end }}
+`
 )
 
 func newCommandScenario() *cobra.Command {
@@ -34,8 +98,44 @@ func newCommandScenario() *cobra.Command {
 
 			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
-			report := client.RunScenario(context.TODO(), scenario.Scenario)
-			if report.Error != nil {
+			scenarioReport := client.RunScenario(context.TODO(), scenario.Scenario)
+			if scenarioReport.Error != nil {
+				return err
+			}
+
+			queries := make(map[string]*Query)
+			for name, result := range scenarioReport.QueryResult {
+				query := &Query{
+					Name:   name,
+					Action: *result.Query.Action,
+					Result: struct {
+						Successful  bool
+						TotalTime   time.Duration
+						TotalChange int
+						Error       error
+					}{
+						Successful:  result.Error == nil,
+						TotalTime:   result.End.Sub(result.Start),
+						TotalChange: result.TotalChange,
+						Error:       result.Error,
+					},
+				}
+				queries[name] = query
+			}
+			report := &Report{
+				Version:    cmd.Parent().Version,
+				URI:        uri,
+				Database:   *scenario.Scenario.Database,
+				Collection: *scenario.Scenario.Collection,
+				Parallel:   scenario.Scenario.Parallel,
+				Queries:    queries,
+			}
+
+			t, err := parseTemplates("report-template", reportTemplate, queryBlock)
+			if err != nil {
+				return err
+			}
+			if err := t.Execute(defaultOutput, report); err != nil {
 				return err
 			}
 			return nil
@@ -43,6 +143,24 @@ func newCommandScenario() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&uri, "uri", "", "MongoDB URI connection string.")
 	return cmd
+}
+
+func parseTemplates(name string, tmpl ...string) (*template.Template, error) {
+	if len(tmpl) == 0 {
+		return nil, fmt.Errorf("no templates provided")
+	}
+	var t *template.Template
+	for idx, tStr := range tmpl {
+		if t == nil {
+			t = template.New(fmt.Sprintf("%v-%d", name, idx))
+		}
+		var err error
+		t, err = t.Parse(tStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return t, nil
 }
 
 func getScenarioConfig(cfgFile string) (*scenarioConfig, error) {
