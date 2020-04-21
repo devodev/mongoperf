@@ -1,4 +1,4 @@
-package main
+package mongodb
 
 import (
 	"context"
@@ -20,6 +20,28 @@ type Trainer struct {
 type Client struct {
 	uri    string
 	logger *logrus.Logger
+}
+
+// Option .
+type Option func(*Client)
+
+// WithLogger sets the provided logger on the client.
+func WithLogger(l *logrus.Logger) func(c *Client) {
+	if l != nil {
+		return func(c *Client) {
+			c.logger = l
+		}
+	}
+	return func(c *Client) {}
+}
+
+// New returns a new Client using the provided URI.
+func New(uri string, options ...Option) *Client {
+	c := &Client{uri: uri}
+	for _, opt := range options {
+		opt(c)
+	}
+	return c
 }
 
 // RunDemo .
