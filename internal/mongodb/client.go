@@ -123,7 +123,7 @@ func (r *ScenarioReport) AddQuery(name string, q *ScenarioQuery) {
 func (r *ScenarioReport) SetResult(name string, value interface{}, err error) {
 	r.muResult.Lock()
 	defer r.muResult.Unlock()
-	if _, ok := r.QueryResult[name]; ok {
+	if _, ok := r.Query[name]; ok {
 		r.QueryResult[name] = value
 		r.QueryResultError[name] = err
 	}
