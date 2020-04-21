@@ -104,8 +104,8 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) error {
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
-	c.logger.Printf("scenario name: %v", *q.Name)
-	c.logger.Printf("scenario action: %v", *q.Action)
+	c.logger.Printf("query name: %v", *q.Name)
+	c.logger.Printf("query action: %v", *q.Action)
 
 	switch a := q.Action; {
 	default:
@@ -116,22 +116,24 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			return fmt.Errorf("Meta is nil")
 		}
 
-		data, ok := payload["Data"]
-		if !ok {
-			return fmt.Errorf("Data attribute is mandatory in Payload")
+		type metaInsertOne struct {
+			Data    map[string]interface{}
+			Options *options.InsertOneOptions
 		}
 
-		opts := options.InsertOne()
-		dataOpts, ok := payload["Options"]
-		if ok {
-			if err := mapstructure.Decode(dataOpts, opts); err != nil {
-				return fmt.Errorf("Options attribute is of wrong type")
-			}
+		var meta metaInsertOne
+		if err := mapstructure.Decode(payload, &meta); err != nil {
+			return err
 		}
-		c.logger.Printf("%v data: %+v", *a, data)
-		c.logger.Printf("%v options: %+v", *a, opts)
+		if len(meta.Data) == 0 {
+			return fmt.Errorf("Data is empty")
+		}
+		if meta.Options == nil {
+			meta.Options = options.InsertOne()
+		}
+		c.logger.Printf("query meta: %+v", meta)
 
-		insertResult, err := collection.InsertOne(ctx, data, opts)
+		insertResult, err := collection.InsertOne(ctx, meta.Data, meta.Options)
 		if err != nil {
 			return err
 		}
@@ -142,26 +144,24 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			return fmt.Errorf("Meta is nil")
 		}
 
-		data, ok := payload["Data"]
-		if !ok {
-			return fmt.Errorf("Data attribute is mandatory in Payload")
-		}
-		dataSlice, ok := data.([]interface{})
-		if !ok {
-			return fmt.Errorf("Data attribute is of wrong type")
+		type metaInsertMany struct {
+			Data    []interface{}
+			Options *options.InsertManyOptions
 		}
 
-		opts := options.InsertMany()
-		dataOpts, ok := payload["Options"]
-		if ok {
-			if err := mapstructure.Decode(dataOpts, opts); err != nil {
-				return fmt.Errorf("Options attribute is of wrong type")
-			}
+		var meta metaInsertMany
+		if err := mapstructure.Decode(payload, &meta); err != nil {
+			return err
 		}
-		c.logger.Printf("%v data: %+v", *a, data)
-		c.logger.Printf("%v options: %+v", *a, opts)
+		if len(meta.Data) == 0 {
+			return fmt.Errorf("Data is empty")
+		}
+		if meta.Options == nil {
+			meta.Options = options.InsertMany()
+		}
+		c.logger.Printf("query meta: %+v", meta)
 
-		insertManyResult, err := collection.InsertMany(ctx, dataSlice, opts)
+		insertManyResult, err := collection.InsertMany(ctx, meta.Data, meta.Options)
 		if err != nil {
 			return err
 		}
@@ -172,27 +172,25 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			return fmt.Errorf("Meta is nil")
 		}
 
-		data, ok := payload["Data"]
-		if !ok {
-			return fmt.Errorf("Update attribute is mandatory in Payload")
-		}
-		filter, ok := payload["Filter"]
-		if !ok {
-			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		type metaUpdateOne struct {
+			Data    map[string]interface{}
+			Filter  map[string]interface{}
+			Options *options.UpdateOptions
 		}
 
-		opts := options.Update()
-		dataOpts, ok := payload["Options"]
-		if ok {
-			if err := mapstructure.Decode(dataOpts, opts); err != nil {
-				return fmt.Errorf("Options attribute is of wrong type")
-			}
+		var meta metaUpdateOne
+		if err := mapstructure.Decode(payload, &meta); err != nil {
+			return err
 		}
-		c.logger.Printf("%v data: %+v", *a, data)
-		c.logger.Printf("%v filter: %+v", *a, filter)
-		c.logger.Printf("%v options: %+v", *a, opts)
+		if len(meta.Data) == 0 {
+			return fmt.Errorf("Data is empty")
+		}
+		if meta.Options == nil {
+			meta.Options = options.Update()
+		}
+		c.logger.Printf("query meta: %+v", meta)
 
-		updateResult, err := collection.UpdateOne(ctx, filter, data, opts)
+		updateResult, err := collection.UpdateOne(ctx, meta.Filter, meta.Data, meta.Options)
 		if err != nil {
 			return err
 		}
@@ -203,23 +201,22 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			return fmt.Errorf("Meta is nil")
 		}
 
-		filter, ok := payload["Filter"]
-		if !ok {
-			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		type metaFindOne struct {
+			Filter  map[string]interface{}
+			Options *options.FindOneOptions
 		}
 
-		opts := options.FindOne()
-		dataOpts, ok := payload["Options"]
-		if ok {
-			if err := mapstructure.Decode(dataOpts, opts); err != nil {
-				return fmt.Errorf("Options attribute is of wrong type")
-			}
+		var meta metaFindOne
+		if err := mapstructure.Decode(payload, &meta); err != nil {
+			return err
 		}
-		c.logger.Printf("%v filter: %+v", *a, filter)
-		c.logger.Printf("%v options: %+v", *a, opts)
+		if meta.Options == nil {
+			meta.Options = options.FindOne()
+		}
+		c.logger.Printf("query meta: %+v", meta)
 
 		var result map[string]interface{}
-		err := collection.FindOne(ctx, filter, opts).Decode(&result)
+		err := collection.FindOne(ctx, meta.Filter, meta.Options).Decode(&result)
 		if err != nil {
 			return err
 		}
@@ -230,22 +227,21 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 			return fmt.Errorf("Meta is nil")
 		}
 
-		filter, ok := payload["Filter"]
-		if !ok {
-			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		type metaFindMany struct {
+			Filter  map[string]interface{}
+			Options *options.FindOptions
 		}
 
-		opts := options.Find()
-		dataOpts, ok := payload["Options"]
-		if ok {
-			if err := mapstructure.Decode(dataOpts, opts); err != nil {
-				return fmt.Errorf("Options attribute is of wrong type")
-			}
+		var meta metaFindMany
+		if err := mapstructure.Decode(payload, &meta); err != nil {
+			return err
 		}
-		c.logger.Printf("%v filter: %+v", *a, filter)
-		c.logger.Printf("%v options: %+v", *a, opts)
+		if meta.Options == nil {
+			meta.Options = options.Find()
+		}
+		c.logger.Printf("query meta: %+v", meta)
 
-		cur, err := collection.Find(ctx, filter, opts)
+		cur, err := collection.Find(ctx, meta.Filter, meta.Options)
 		if err != nil {
 			return err
 		}
