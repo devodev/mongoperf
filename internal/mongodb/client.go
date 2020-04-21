@@ -153,27 +153,45 @@ func (r *ScenarioReport) SetResult(name string, res *Result) {
 func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 	report := NewScenarioReport()
 
-	client, close, err := c.connect(ctx)
+	client, cleanFn, err := c.connect(ctx)
 	if err != nil {
 		report.SetError(err)
 		return report
 	}
-	defer close()
+	defer cleanFn()
 
 	collection := client.Database(*s.Database).Collection(*s.Collection)
 	c.logger.Infof("using database: %v", *s.Database)
 	c.logger.Infof("using collection: %v", *s.Collection)
 
-	for idx, query := range s.Queries {
-		c.logger.Infof("query#%d name: %v", idx+1, *query.Name)
-		c.logger.Infof("query#%d action: %v", idx+1, *query.Action)
-
-		res := c.runQuery(ctx, collection, query)
-		if res.Error != nil {
-			c.logger.Error(res.Error)
+	dataCh := make(chan *ScenarioQuery)
+	go func() {
+		for _, query := range s.Queries {
+			dataCh <- query
 		}
-		report.SetResult(*query.Name, res)
+		close(dataCh)
+	}()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(s.Parallel)
+
+	for i := 0; i < s.Parallel; i++ {
+		go func() {
+			defer wg.Done()
+
+			for query := range dataCh {
+				c.logger.Infof("received query name: %v action: %v", *query.Name, *query.Action)
+
+				res := c.runQuery(ctx, collection, query)
+				if res.Error != nil {
+					c.logger.Error(res.Error)
+				}
+				report.SetResult(*query.Name, res)
+			}
+		}()
 	}
+
+	wg.Wait()
 	return report
 }
 

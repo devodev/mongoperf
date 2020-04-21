@@ -114,6 +114,10 @@ func newCommandScenario() *cobra.Command {
 				return err
 			}
 
+			if scenario.Scenario.Parallel < 1 {
+				return fmt.Errorf("Scenario.Parallel must be greater than 0")
+			}
+
 			if uri == "" {
 				uri = "mongodb://localhost:27017"
 			}
