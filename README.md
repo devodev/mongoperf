@@ -13,9 +13,6 @@ Currently, **`mongo-tester` requires Go version 1.13 or greater**.
 - [Build](#build)
 - [CLI](#cli)
   - [Usage](#usage)
-  - [Scenario File](#scenario-file)
-    - [Definition](#definition)
-    - [Example](#example)
 
 ## Development
 You can use the provided `Dockerfile` to build an image that will provide a clean environment for development purposes.</br>
@@ -73,45 +70,4 @@ Flags:
       --version   version for mongoperf
 
 Use "mongoperf [command] --help" for more information about a command.
-```
-
-### Scenario File
-Current schema used for defining scenarios.
-
-#### Definition
-- Database: mongodb database.
-- Collection: mongodb collection.
-- Queries: List of ScenarioQuery. Contains individual query to execute against the Scenario collection.
-- ScenarioQuery.Name: Used for logging purposes.
-- ScenarioQuery.Action: The MongoDB query type to execute. Ex.: InsertOne, InsertMany, etc.
-- ScenarioQuery.Meta: List of ScenarioMeta. Contains abstract payload data used by Actions.
-- ScenarioMeta.Payload: A BSON.D (map) representation of the data needed by ScenarioQuery.Action.
-- ScenarioMeta.PayloadList: A BSON.A (list) representation of the data needed by ScenarioQuery.Action.
-
-#### Example
-```
----
-Scenario:
-  Database: test
-  Collection: test
-  Queries:
-  - Name: testone
-    Action: InsertOne
-    Meta:
-      Payload:
-        Name: Ash
-        Age: 10
-        City: Pallet Town
-      PayloadList:
-  - Name: testmany
-    Action: InsertMany
-    Meta:
-      Payload:
-      PayloadList:
-      - Name: Misty
-        Age: 10
-        City: Cerulean City
-      - Name: Brock
-        Age: 15
-        City: Pewter City
 ```
