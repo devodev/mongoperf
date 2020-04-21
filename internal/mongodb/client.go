@@ -59,10 +59,10 @@ func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, erro
 	close := func() error {
 		err = client.Disconnect(ctx)
 		if err != nil {
-			c.logger.Println(err)
+			c.logger.Error(err)
 			return err
 		}
-		c.logger.Println("Connection to MongoDB closed.")
+		c.logger.Info("Connection to MongoDB closed.")
 		return nil
 	}
 	return client, close, nil
@@ -72,6 +72,7 @@ func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, erro
 type Scenario struct {
 	Database   *string
 	Collection *string
+	Parallel   int
 	Queries    []*ScenarioQuery
 }
 
@@ -140,11 +141,13 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 	defer close()
 
 	collection := client.Database(*s.Database).Collection(*s.Collection)
-	c.logger.Printf("using database: %v", *s.Database)
-	c.logger.Printf("using collection: %v", *s.Collection)
+	c.logger.Infof("using database: %v", *s.Database)
+	c.logger.Infof("using collection: %v", *s.Collection)
 
 	for idx, query := range s.Queries {
-		c.logger.Printf("running query #%d", idx+1)
+		c.logger.Infof("query#%d name: %v", idx+1, *query.Name)
+		c.logger.Infof("query#%d action: %v", idx+1, *query.Action)
+
 		report.AddQuery(*query.Name, query)
 
 		err := c.runQuery(ctx, collection, query)
@@ -157,9 +160,6 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
-	c.logger.Printf("query name: %v", *q.Name)
-	c.logger.Printf("query action: %v", *q.Action)
-
 	switch a := q.Action; {
 	default:
 		return fmt.Errorf("scenario action not supported: %v", a)
@@ -184,7 +184,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.InsertOne()
 		}
-		c.logger.Printf("query meta: %+v", meta)
+		c.logger.Infof("query meta: %+v", meta)
 
 		insertResult, err := collection.InsertOne(ctx, meta.Data, meta.Options)
 		if err != nil {
@@ -212,7 +212,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.InsertMany()
 		}
-		c.logger.Printf("query meta: %+v", meta)
+		c.logger.Infof("query meta: %+v", meta)
 
 		insertManyResult, err := collection.InsertMany(ctx, meta.Data, meta.Options)
 		if err != nil {
@@ -241,13 +241,13 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.Update()
 		}
-		c.logger.Printf("query meta: %+v", meta)
+		c.logger.Infof("query meta: %+v", meta)
 
 		updateResult, err := collection.UpdateOne(ctx, meta.Filter, meta.Data, meta.Options)
 		if err != nil {
 			return err
 		}
-		c.logger.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+		c.logger.Infof("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
 	case *a == "FindOne":
 		payload := q.Meta
 		if payload == nil {
@@ -266,14 +266,14 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.FindOne()
 		}
-		c.logger.Printf("query meta: %+v", meta)
+		c.logger.Infof("query meta: %+v", meta)
 
 		var result map[string]interface{}
 		err := collection.FindOne(ctx, meta.Filter, meta.Options).Decode(&result)
 		if err != nil {
 			return err
 		}
-		c.logger.Printf("Found a single document: %+v\n", result)
+		c.logger.Infof("Found a single document: %+v\n", result)
 	case *a == "Find":
 		payload := q.Meta
 		if payload == nil {
@@ -292,7 +292,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.Find()
 		}
-		c.logger.Printf("query meta: %+v", meta)
+		c.logger.Infof("query meta: %+v", meta)
 
 		cur, err := collection.Find(ctx, meta.Filter, meta.Options)
 		if err != nil {
@@ -312,7 +312,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if err := cur.Err(); err != nil {
 			return err
 		}
-		c.logger.Printf("Found multiple documents (array of pointers): %+v\n", results)
+		c.logger.Infof("Found multiple documents (array of pointers): %+v\n", results)
 	}
 	return nil
 }
@@ -362,7 +362,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+	c.logger.Infof("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
 
 	// Find one
 	var result Trainer
@@ -370,7 +370,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	if err != nil {
 		return err
 	}
-	c.logger.Printf("Found a single document: %+v\n", result)
+	c.logger.Infof("Found a single document: %+v\n", result)
 
 	// Find multiple
 	// Pass these options to the Find method
@@ -407,13 +407,13 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	// Close the cursor once finished
 	cur.Close(ctx)
 
-	c.logger.Printf("Found multiple documents (array of pointers): %+v\n", results)
+	c.logger.Infof("Found multiple documents (array of pointers): %+v\n", results)
 
 	// Delete all
 	deleteResult, err := collection.DeleteMany(ctx, bson.D{{}})
 	if err != nil {
 		return err
 	}
-	c.logger.Printf("Deleted %v documents in the trainers collection\n", deleteResult.DeletedCount)
+	c.logger.Infof("Deleted %v documents in the trainers collection\n", deleteResult.DeletedCount)
 	return nil
 }
