@@ -26,7 +26,6 @@ func newCommandScenario() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			logger.Printf("using scenario: %+v", scenario)
 
 			if uri == "" {
 				uri = "mongodb://localhost:27017"
