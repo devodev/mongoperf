@@ -3,6 +3,7 @@ package mongodb
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
@@ -81,11 +82,60 @@ type ScenarioQuery struct {
 	Meta   map[string]interface{}
 }
 
+// ScenarioReport .
+type ScenarioReport struct {
+	Error error
+
+	mu    *sync.Mutex
+	Query map[string]*ScenarioQuery
+
+	muResult         *sync.Mutex
+	QueryResult      map[string]interface{}
+	QueryResultError map[string]error
+}
+
+// NewScenarioReport .
+func NewScenarioReport() *ScenarioReport {
+	return &ScenarioReport{
+		mu:    &sync.Mutex{},
+		Query: make(map[string]*ScenarioQuery),
+
+		muResult:         &sync.Mutex{},
+		QueryResult:      make(map[string]interface{}),
+		QueryResultError: make(map[string]error),
+	}
+}
+
+// SetError .
+func (r *ScenarioReport) SetError(err error) {
+	r.Error = err
+}
+
+// AddQuery .
+func (r *ScenarioReport) AddQuery(name string, q *ScenarioQuery) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Query[name] = q
+}
+
+// SetResult .
+func (r *ScenarioReport) SetResult(name string, value interface{}, err error) {
+	r.muResult.Lock()
+	defer r.muResult.Unlock()
+	if _, ok := r.QueryResult[name]; ok {
+		r.QueryResult[name] = value
+		r.QueryResultError[name] = err
+	}
+}
+
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, s *Scenario) error {
+func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
+	report := NewScenarioReport()
+
 	client, close, err := c.connect(ctx)
 	if err != nil {
-		return err
+		report.SetError(err)
+		return report
 	}
 	defer close()
 
@@ -95,12 +145,15 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) error {
 
 	for idx, query := range s.Queries {
 		c.logger.Printf("running query #%d", idx+1)
+		report.AddQuery(*query.Name, query)
+
 		err := c.runQuery(ctx, collection, query)
 		if err != nil {
 			c.logger.Error(err)
 		}
+		report.SetResult(*query.Name, nil, err)
 	}
-	return nil
+	return report
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {

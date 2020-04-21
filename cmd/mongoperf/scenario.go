@@ -34,8 +34,9 @@ func newCommandScenario() *cobra.Command {
 
 			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
-			if err := client.RunScenario(context.TODO(), scenario.Scenario); err != nil {
-				logger.Fatal(err)
+			report := client.RunScenario(context.TODO(), scenario.Scenario)
+			if report.Error != nil {
+				return err
 			}
 			return nil
 		},
