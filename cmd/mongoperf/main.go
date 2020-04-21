@@ -22,7 +22,10 @@ func newCommandRoot() *cobra.Command {
 		Short:   "Run performance tests scenarios on a mongodb instance or cluster.",
 		Version: "0.1.0",
 	}
-	cmd.AddCommand(newCommandQuery())
+	cmd.AddCommand(
+		newCommandDemo(),
+		newCommandScenario(),
+	)
 	return cmd
 }
 

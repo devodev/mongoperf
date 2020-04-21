@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
@@ -9,11 +10,24 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// Trainer .
-type Trainer struct {
-	Name string
-	Age  int
-	City string
+// Scenario .
+type Scenario struct {
+	Database   *string
+	Collection *string
+	Queries    []*ScenarioQuery
+}
+
+// ScenarioQuery .
+type ScenarioQuery struct {
+	Name   *string
+	Action *string
+	Meta   *ScenarioMeta
+}
+
+// ScenarioMeta .
+type ScenarioMeta struct {
+	Payload     bson.M
+	PayloadList bson.A
 }
 
 // Client .
@@ -44,44 +58,104 @@ func New(uri string, options ...Option) *Client {
 	return c
 }
 
-// RunDemo .
-func (c *Client) RunDemo(ctx context.Context, db, col string) error {
+func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, error) {
 	// Set client options
 	clientOptions := options.Client().ApplyURI(c.uri)
 
 	// Connect to MongoDB
-	client, err := mongo.Connect(context.TODO(), clientOptions)
+	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// Check the connection
-	err = client.Ping(context.TODO(), nil)
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Create closure for cleanup
+	close := func() error {
+		err = client.Disconnect(ctx)
+		if err != nil {
+			c.logger.Println(err)
+			return err
+		}
+		c.logger.Println("Connection to MongoDB closed.")
+		return nil
+	}
+	return client, close, nil
+}
+
+// RunScenario .
+func (c *Client) RunScenario(ctx context.Context, s *Scenario) error {
+	client, close, err := c.connect(ctx)
 	if err != nil {
 		return err
 	}
+	defer close()
 
-	// clean when stopping
-	defer func() {
-		err = client.Disconnect(context.TODO())
+	collection := client.Database(*s.Database).Collection(*s.Collection)
+	c.logger.Printf("using database: %v", *s.Database)
+	c.logger.Printf("using collection: %v", *s.Collection)
+
+	for idx, query := range s.Queries {
+		c.logger.Printf("running query #%d: %q", idx+1, *query.Name)
+		c.runQuery(ctx, collection, query)
+	}
+	return nil
+}
+
+func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
+	switch a := q.Action; {
+	default:
+		return fmt.Errorf("scenario action not supported: %v", a)
+	case *a == "InsertOne":
+		doc := q.Meta.Payload
+
+		c.logger.Printf("inserting: %+v", doc)
+		insertResult, err := collection.InsertOne(ctx, doc)
 		if err != nil {
-			c.logger.Println(err)
+			return err
 		}
-		c.logger.Println("Connection to MongoDB closed.")
-	}()
+		c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
+	case *a == "InsertMany":
+		docs := q.Meta.PayloadList
+
+		c.logger.Printf("inserting: %+v", docs)
+		insertManyResult, err := collection.InsertMany(ctx, docs)
+		if err != nil {
+			return err
+		}
+		c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
+	}
+	return nil
+}
+
+// RunDemo .
+func (c *Client) RunDemo(ctx context.Context, db, col string) error {
+	client, close, err := c.connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer close()
 
 	c.logger.Println("Connected to MongoDB!")
 
 	// Get a collection
 	collection := client.Database(db).Collection(col)
 
+	type Trainer struct {
+		Name string
+		Age  int
+		City string
+	}
 	// Declare test models
 	ash := Trainer{"Ash", 10, "Pallet Town"}
 	misty := Trainer{"Misty", 10, "Cerulean City"}
 	brock := Trainer{"Brock", 15, "Pewter City"}
 
 	// Insert one
-	insertResult, err := collection.InsertOne(context.TODO(), ash)
+	insertResult, err := collection.InsertOne(ctx, ash)
 	if err != nil {
 		return err
 	}
@@ -89,7 +163,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 
 	// Insert multiple
 	trainers := []interface{}{misty, brock}
-	insertManyResult, err := collection.InsertMany(context.TODO(), trainers)
+	insertManyResult, err := collection.InsertMany(ctx, trainers)
 	if err != nil {
 		return err
 	}
@@ -98,7 +172,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	// Update one
 	filter := bson.D{{Key: "name", Value: "Ash"}}
 	update := bson.D{{Key: "$inc", Value: bson.D{{Key: "age", Value: 1}}}}
-	updateResult, err := collection.UpdateOne(context.TODO(), filter, update)
+	updateResult, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
@@ -106,7 +180,7 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 
 	// Find one
 	var result Trainer
-	err = collection.FindOne(context.TODO(), filter).Decode(&result)
+	err = collection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		return err
 	}
@@ -121,14 +195,14 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	var results []*Trainer
 
 	// Passing bson.D{{}} as the filter matches all documents in the collection
-	cur, err := collection.Find(context.TODO(), bson.D{{}}, findOptions)
+	cur, err := collection.Find(ctx, bson.D{{}}, findOptions)
 	if err != nil {
 		return err
 	}
 
 	// Finding multiple documents returns a cursor
 	// Iterating through the cursor allows us to decode documents one at a time
-	for cur.Next(context.TODO()) {
+	for cur.Next(ctx) {
 
 		// create a value into which the single document can be decoded
 		var elem Trainer
@@ -145,12 +219,12 @@ func (c *Client) RunDemo(ctx context.Context, db, col string) error {
 	}
 
 	// Close the cursor once finished
-	cur.Close(context.TODO())
+	cur.Close(ctx)
 
 	c.logger.Printf("Found multiple documents (array of pointers): %+v\n", results)
 
 	// Delete all
-	deleteResult, err := collection.DeleteMany(context.TODO(), bson.D{{}})
+	deleteResult, err := collection.DeleteMany(ctx, bson.D{{}})
 	if err != nil {
 		return err
 	}
