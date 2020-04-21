@@ -162,7 +162,7 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) error {
 	switch a := q.Action; {
 	default:
-		return fmt.Errorf("scenario action not supported: %v", a)
+		return fmt.Errorf("scenario action not supported: %v", *a)
 	case *a == "InsertOne":
 		payload := q.Meta
 		if payload == nil {
