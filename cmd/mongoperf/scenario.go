@@ -13,28 +13,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Report .
-type Report struct {
-	Version    string
-	URI        string
-	Database   string
-	Collection string
-	Parallel   int
-	Queries    map[string]*Query
-}
-
-// Query .
-type Query struct {
-	Name   string
-	Action string
-	Result struct {
-		Successful  bool
-		TotalTime   time.Duration
-		TotalChange int
-		Error       error
-	}
-}
-
 var (
 	reportTemplate = `
 ===============================
@@ -74,6 +52,51 @@ var (
 `
 )
 
+// Report .
+type Report struct {
+	Version    string
+	URI        string
+	Database   string
+	Collection string
+	Parallel   int
+	Queries    map[string]*Query
+}
+
+// Query .
+type Query struct {
+	Name   string
+	Action string
+	Result struct {
+		Successful  bool
+		TotalTime   time.Duration
+		TotalChange int
+		Error       error
+	}
+}
+
+func queriesFromScenario(sr *mongodb.ScenarioReport) map[string]*Query {
+	queries := make(map[string]*Query)
+	for name, result := range sr.QueryResult {
+		query := &Query{
+			Name:   name,
+			Action: *result.Query.Action,
+			Result: struct {
+				Successful  bool
+				TotalTime   time.Duration
+				TotalChange int
+				Error       error
+			}{
+				Successful:  result.Error == nil,
+				TotalTime:   result.End.Sub(result.Start),
+				TotalChange: result.TotalChange,
+				Error:       result.Error,
+			},
+		}
+		queries[name] = query
+	}
+	return queries
+}
+
 func newCommandScenario() *cobra.Command {
 	var (
 		uri string
@@ -103,32 +126,13 @@ func newCommandScenario() *cobra.Command {
 				return err
 			}
 
-			queries := make(map[string]*Query)
-			for name, result := range scenarioReport.QueryResult {
-				query := &Query{
-					Name:   name,
-					Action: *result.Query.Action,
-					Result: struct {
-						Successful  bool
-						TotalTime   time.Duration
-						TotalChange int
-						Error       error
-					}{
-						Successful:  result.Error == nil,
-						TotalTime:   result.End.Sub(result.Start),
-						TotalChange: result.TotalChange,
-						Error:       result.Error,
-					},
-				}
-				queries[name] = query
-			}
 			report := &Report{
 				Version:    cmd.Parent().Version,
 				URI:        uri,
 				Database:   *scenario.Scenario.Database,
 				Collection: *scenario.Scenario.Collection,
 				Parallel:   scenario.Scenario.Parallel,
-				Queries:    queries,
+				Queries:    queriesFromScenario(scenarioReport),
 			}
 
 			t, err := parseTemplates("report-template", reportTemplate, queryBlock)
