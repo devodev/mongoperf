@@ -164,14 +164,24 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 	c.logger.Infof("using database: %v", *s.Database)
 	c.logger.Infof("using collection: %v", *s.Collection)
 
-	dataCh := make(chan *ScenarioQuery)
+	// Result Consumer
+	resultCh := make(chan *Result)
 	go func() {
-		for _, query := range s.Queries {
-			dataCh <- query
+		for result := range resultCh {
+			report.SetResult(*result.Query.Name, result)
 		}
-		close(dataCh)
 	}()
 
+	// Query Producer
+	queryCh := make(chan *ScenarioQuery)
+	go func() {
+		for _, query := range s.Queries {
+			queryCh <- query
+		}
+		close(queryCh)
+	}()
+
+	// Query Consumer
 	wg := &sync.WaitGroup{}
 	wg.Add(s.Parallel)
 
@@ -179,19 +189,20 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 		go func() {
 			defer wg.Done()
 
-			for query := range dataCh {
+			for query := range queryCh {
 				c.logger.Infof("received query name: %v action: %v", *query.Name, *query.Action)
 
 				res := c.runQuery(ctx, collection, query)
 				if res.Error != nil {
 					c.logger.Error(res.Error)
 				}
-				report.SetResult(*query.Name, res)
+				resultCh <- res
 			}
 		}()
 	}
 
 	wg.Wait()
+	close(resultCh)
 	return report
 }
 
