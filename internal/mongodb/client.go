@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -21,13 +22,7 @@ type Scenario struct {
 type ScenarioQuery struct {
 	Name   *string
 	Action *string
-	Meta   *ScenarioMeta
-}
-
-// ScenarioMeta .
-type ScenarioMeta struct {
-	Payload     bson.M
-	PayloadList bson.A
+	Meta   map[string]interface{}
 }
 
 // Client .
@@ -116,73 +111,141 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 	default:
 		return fmt.Errorf("scenario action not supported: %v", a)
 	case *a == "InsertOne":
-		data := q.Meta.Payload
-		if data == nil {
+		payload := q.Meta
+		if payload == nil {
 			return fmt.Errorf("Meta is nil")
 		}
 
-		c.logger.Printf("inserting: %+v", data)
-		insertResult, err := collection.InsertOne(ctx, data)
+		data, ok := payload["Data"]
+		if !ok {
+			return fmt.Errorf("Data attribute is mandatory in Payload")
+		}
+
+		opts := options.InsertOne()
+		dataOpts, ok := payload["Options"]
+		if ok {
+			if err := mapstructure.Decode(dataOpts, opts); err != nil {
+				return fmt.Errorf("Options attribute is of wrong type")
+			}
+		}
+		c.logger.Printf("%v data: %+v", *a, data)
+		c.logger.Printf("%v options: %+v", *a, opts)
+
+		insertResult, err := collection.InsertOne(ctx, data, opts)
 		if err != nil {
 			return err
 		}
 		c.logger.Println("Inserted a single document: ", insertResult.InsertedID)
 	case *a == "InsertMany":
-		data := q.Meta.PayloadList
-		if data == nil {
+		payload := q.Meta
+		if payload == nil {
 			return fmt.Errorf("Meta is nil")
 		}
 
-		c.logger.Printf("inserting: %+v", data)
-		insertManyResult, err := collection.InsertMany(ctx, data)
+		data, ok := payload["Data"]
+		if !ok {
+			return fmt.Errorf("Data attribute is mandatory in Payload")
+		}
+		dataSlice, ok := data.([]interface{})
+		if !ok {
+			return fmt.Errorf("Data attribute is of wrong type")
+		}
+
+		opts := options.InsertMany()
+		dataOpts, ok := payload["Options"]
+		if ok {
+			if err := mapstructure.Decode(dataOpts, opts); err != nil {
+				return fmt.Errorf("Options attribute is of wrong type")
+			}
+		}
+		c.logger.Printf("%v data: %+v", *a, data)
+		c.logger.Printf("%v options: %+v", *a, opts)
+
+		insertManyResult, err := collection.InsertMany(ctx, dataSlice, opts)
 		if err != nil {
 			return err
 		}
 		c.logger.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
 	case *a == "UpdateOne":
-		data := q.Meta.Payload
-		if data == nil {
+		payload := q.Meta
+		if payload == nil {
 			return fmt.Errorf("Meta is nil")
 		}
 
-		filter, ok := data["Filter"]
-		if !ok {
-			return fmt.Errorf("Filter attribute is mandatory in Payload")
-		}
-		update, ok := data["Update"]
+		data, ok := payload["Data"]
 		if !ok {
 			return fmt.Errorf("Update attribute is mandatory in Payload")
 		}
-		c.logger.Printf("update filter: %+v", filter)
-		c.logger.Printf("update payload: %+v", update)
+		filter, ok := payload["Filter"]
+		if !ok {
+			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		}
 
-		updateResult, err := collection.UpdateOne(ctx, filter, update)
+		opts := options.Update()
+		dataOpts, ok := payload["Options"]
+		if ok {
+			if err := mapstructure.Decode(dataOpts, opts); err != nil {
+				return fmt.Errorf("Options attribute is of wrong type")
+			}
+		}
+		c.logger.Printf("%v data: %+v", *a, data)
+		c.logger.Printf("%v filter: %+v", *a, filter)
+		c.logger.Printf("%v options: %+v", *a, opts)
+
+		updateResult, err := collection.UpdateOne(ctx, filter, data, opts)
 		if err != nil {
 			return err
 		}
 		c.logger.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
 	case *a == "FindOne":
-		data := q.Meta.Payload
-		if data == nil {
+		payload := q.Meta
+		if payload == nil {
 			return fmt.Errorf("Meta is nil")
 		}
 
+		filter, ok := payload["Filter"]
+		if !ok {
+			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		}
+
+		opts := options.FindOne()
+		dataOpts, ok := payload["Options"]
+		if ok {
+			if err := mapstructure.Decode(dataOpts, opts); err != nil {
+				return fmt.Errorf("Options attribute is of wrong type")
+			}
+		}
+		c.logger.Printf("%v filter: %+v", *a, filter)
+		c.logger.Printf("%v options: %+v", *a, opts)
+
 		var result map[string]interface{}
-		err := collection.FindOne(ctx, data).Decode(&result)
+		err := collection.FindOne(ctx, filter, opts).Decode(&result)
 		if err != nil {
 			return err
 		}
 		c.logger.Printf("Found a single document: %+v\n", result)
 	case *a == "Find":
-		data := q.Meta.Payload
-		if data == nil {
+		payload := q.Meta
+		if payload == nil {
 			return fmt.Errorf("Meta is nil")
 		}
 
-		findOptions := options.Find()
-		// findOptions.SetLimit(2)
+		filter, ok := payload["Filter"]
+		if !ok {
+			return fmt.Errorf("Filter attribute is mandatory in Payload")
+		}
 
-		cur, err := collection.Find(ctx, data, findOptions)
+		opts := options.Find()
+		dataOpts, ok := payload["Options"]
+		if ok {
+			if err := mapstructure.Decode(dataOpts, opts); err != nil {
+				return fmt.Errorf("Options attribute is of wrong type")
+			}
+		}
+		c.logger.Printf("%v filter: %+v", *a, filter)
+		c.logger.Printf("%v options: %+v", *a, opts)
+
+		cur, err := collection.Find(ctx, filter, opts)
 		if err != nil {
 			return err
 		}
