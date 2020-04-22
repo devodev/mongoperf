@@ -1,10 +1,10 @@
-# mongo-tester
-`mongo-tester` provides a CLI for running predefined scenarios against a mongodb database and report performance statistics.
+# mongoperf
+`mongoperf` provides a CLI for running predefined scenarios against a mongodb database and report performance statistics.
 
 ## Overview
-`mongo-tester` provides a CLI for running predefined scenarios against a mongodb database and report performance statistics.
+`mongoperf` provides a CLI for running predefined scenarios against a mongodb database and report performance statistics.
 
-Currently, **`mongo-tester` requires Go version 1.13 or greater**.
+Currently, **`mongoperf` requires Go version 1.13 or greater**.
 
 ## Table of Contents
 
@@ -20,20 +20,20 @@ Instructions that follow assumes you are running `Windows`, have `Docker Desktop
 
 Clone this repository and build the image
 ```
-$ git clone https://github.com/devodev/mongo-tester
-$ cd ./mongo-tester
-$ docker build --tag=mongo-tester .
+$ git clone https://github.com/devodev/mongoperf
+$ cd ./mongoperf
+$ docker build --tag=mongoperf .
 ```
 
 Run a container using the previously built image while mounting the CWD
 ```
 $ docker run \
     --rm \
-    --volume="$(pwd -W):/srv/src/github.com/devodev/mongo-tester" \
+    --volume="$(pwd -W):/srv/src/github.com/devodev/mongoperf" \
     --tty \
     --interactive \
-    mongo-tester
-$ root@03e67598a37f:/srv/src/github.com/devodev/mongo-tester#
+    mongoperf
+$ root@03e67598a37f:/srv/src/github.com/devodev/mongoperf#
 ```
 
 Start deving
@@ -46,8 +46,8 @@ Build the CLI for a target platform (Go cross-compiling feature), for example li
 ```
 $ mkdir $HOME/src
 $ cd $HOME/src
-$ git clone https://github.com/devodev/mongo-tester.git
-$ cd mongo-tester
+$ git clone https://github.com/devodev/mongoperf.git
+$ cd mongoperf
 $ env GOOS=linux go build -o mongoperf_linux ./cmd/mongoperf
 ```
 If you are a Windows user, substitute the $HOME environment variable above with %USERPROFILE%.
