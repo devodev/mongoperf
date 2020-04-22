@@ -27,11 +27,9 @@ var (
 ---------------------------------------
   Config
 ---------------------------------------
-  URI:       {{ .URI }}
-  Database   {{ .Database }}
-  Collection {{ .Collection }}
-  Parallel   {{ .Parallel }}
-
+{{ with . -}}
+{{ block "config" . }}{{ end }}
+{{- end }}
 ---------------------------------------
   Queries
 ---------------------------------------
@@ -43,6 +41,15 @@ var (
 =======================================
 `
 
+	configBlock = `
+{{ define "config" }}
+    URI:        {{ .URI }}
+    Database:   {{ .Database }}
+    Collection: {{ .Collection }}
+    Parallel:   {{ .Parallel }}
+{{ end }}
+`
+
 	queryBlock = `
 {{ define "query" }}
   > Name:        {{ .Name }}
@@ -50,8 +57,9 @@ var (
     TotalQuery:  {{ .TotalQuery }}
     TotalTime:   {{ .TotalTime }}
     TotalChange: {{ .TotalChange }}
-    Successful:  {{ if .Error }}false{{ else }}true{{ end }}
-    Error:       {{ if .Error }}{{ .Error.Error }}{{ else }}nil{{ end }}
+    Successful:  {{ if .LastError }}false{{ else }}true{{ end }}
+    ErrorCount:  {{ .ErrorCount }}
+    LastError:   {{ if .LastError }}{{ .LastError.Error }}{{ else }}nil{{ end }}
 {{ end }}
 `
 )
@@ -75,7 +83,8 @@ type ReportQuery struct {
 	TotalTime   time.Duration
 	TotalQuery  int
 	TotalChange int
-	Error       error
+	ErrorCount  int
+	LastError   error
 }
 
 // NewReportQuery .
@@ -89,12 +98,16 @@ func NewReportQuery(name, action string) *ReportQuery {
 }
 
 // Update .
-func (rq *ReportQuery) Update(dur time.Duration, changes int) {
+func (rq *ReportQuery) Update(dur time.Duration, changes int, err error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.TotalQuery++
 	rq.TotalTime += dur
 	rq.TotalChange += changes
+	if err != nil {
+		rq.ErrorCount++
+		rq.LastError = err
+	}
 }
 
 func newCommandScenario() *cobra.Command {
@@ -142,7 +155,7 @@ func newCommandScenario() *cobra.Command {
 						rq = NewReportQuery(*result.Query.Name, *result.Query.Action)
 					}
 					delta := result.End.Sub(result.Start)
-					rq.Update(delta, result.TotalChange)
+					rq.Update(delta, result.TotalChange, result.Error)
 					queries[*result.Query.Name] = rq
 				}
 				close(doneCh)
@@ -163,7 +176,7 @@ func newCommandScenario() *cobra.Command {
 				Queries:    queries,
 			}
 
-			t, err := parseTemplates("report-template", reportTemplate, queryBlock)
+			t, err := parseTemplates("report-template", reportTemplate, configBlock, queryBlock)
 			if err != nil {
 				return err
 			}
