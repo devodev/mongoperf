@@ -23,7 +23,6 @@ func newCommandRoot() *cobra.Command {
 		Version: "0.1.0",
 	}
 	cmd.AddCommand(
-		newCommandDemo(),
 		newCommandScenario(),
 	)
 	return cmd
