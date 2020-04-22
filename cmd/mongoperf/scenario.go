@@ -127,21 +127,21 @@ func newCommandScenario() *cobra.Command {
 
 			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
-			interrupt := make(chan os.Signal, 1)
-			signal.Notify(interrupt, os.Interrupt)
+			interruptCh := make(chan os.Signal, 1)
+			signal.Notify(interruptCh, os.Interrupt)
 
-			ctx, cancelFn := context.WithCancel(context.Background())
+			ctx, cancelCtx := context.WithCancel(context.Background())
 
-			done := make(chan struct{}, 0)
+			doneCh := make(chan struct{}, 0)
 			scenarioReport := mongodb.NewScenarioReport()
 
-			go client.RunScenario(ctx, scenario.Scenario, scenarioReport, done)
+			go client.RunScenario(ctx, scenario.Scenario, scenarioReport, doneCh)
 
 			select {
-			case <-interrupt:
-			case <-done:
+			case <-interruptCh:
+			case <-doneCh:
 			}
-			cancelFn()
+			cancelCtx()
 
 			report := &Report{
 				Version:    cmd.Parent().Version,
