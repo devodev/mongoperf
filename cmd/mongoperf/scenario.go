@@ -112,6 +112,8 @@ func newCommandScenario() *cobra.Command {
 			doneCh := make(chan struct{}, 0)
 			resultCh := make(chan *mongodb.Result, 0)
 
+			go client.RunScenario(ctx, scenario.Scenario, resultCh)
+
 			queries := make(map[string]*ReportQuery)
 			go func() {
 				for result := range resultCh {
@@ -132,9 +134,8 @@ func newCommandScenario() *cobra.Command {
 					}
 					queries[*result.Query.Name] = q
 				}
+				close(doneCh)
 			}()
-
-			go client.RunScenario(ctx, scenario.Scenario, resultCh, doneCh)
 
 			select {
 			case <-interruptCh:

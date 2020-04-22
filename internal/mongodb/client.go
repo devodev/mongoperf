@@ -122,7 +122,7 @@ type ScenarioQuery struct {
 }
 
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Result, done chan struct{}) error {
+func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Result) error {
 	client, cleanFn, err := c.connect(ctx)
 	if err != nil {
 		return err
@@ -164,7 +164,6 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Re
 
 	wg.Wait()
 	close(resultCh)
-	close(done)
 	return nil
 }
 
