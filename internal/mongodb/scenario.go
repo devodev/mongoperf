@@ -6,37 +6,20 @@ import (
 	"time"
 )
 
-// ScenarioConfig .
-type ScenarioConfig struct {
-	Database   *string
-	Collection *string
-	Parallel   int
-	BufferSize int
-	Queries    []*ScenarioQueryConfig
-}
-
-// ScenarioQueryConfig .
-type ScenarioQueryConfig struct {
-	Name   *string
-	Action *string
-	Repeat *int
-	Meta   map[string]interface{}
-}
-
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, s *ScenarioConfig, resultCh chan *QueryResult) error {
-	collection := c.client.Database(*s.Database).Collection(*s.Collection)
-	c.logger.Infof("using database: %v", *s.Database)
-	c.logger.Infof("using collection: %v", *s.Collection)
+func (c *Client) RunScenario(ctx context.Context, config *Config, resultCh chan *QueryResult) error {
+	collection := c.client.Database(*config.Database).Collection(*config.Collection)
+	c.logger.Infof("using database: %v", *config.Database)
+	c.logger.Infof("using collection: %v", *config.Collection)
 
 	// Query Producer
-	queryCh := make(chan *ScenarioQueryConfig, s.BufferSize)
+	queryCh := make(chan *ConfigQuery, *config.BufferSize)
 	go func() {
 		wg := &sync.WaitGroup{}
-		wg.Add(len(s.Queries))
+		wg.Add(len(config.Queries))
 
-		for _, query := range s.Queries {
-			go func(q *ScenarioQueryConfig) {
+		for _, query := range config.Queries {
+			go func(q *ConfigQuery) {
 				defer wg.Done()
 
 				switch r := *q.Repeat; {
@@ -57,7 +40,7 @@ func (c *Client) RunScenario(ctx context.Context, s *ScenarioConfig, resultCh ch
 						}
 					}
 				}
-			}(query)
+			}(&query)
 		}
 		wg.Wait()
 		// wait until all query are consumed
@@ -72,9 +55,9 @@ func (c *Client) RunScenario(ctx context.Context, s *ScenarioConfig, resultCh ch
 
 	// Query Consumer
 	wg := &sync.WaitGroup{}
-	wg.Add(s.Parallel)
+	wg.Add(*config.Parallel)
 
-	for i := 0; i < s.Parallel; i++ {
+	for i := 0; i < *config.Parallel; i++ {
 		go func() {
 			defer wg.Done()
 
