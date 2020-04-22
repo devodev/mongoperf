@@ -61,11 +61,11 @@ type Report struct {
 	Database   string
 	Collection string
 	Parallel   int
-	Queries    map[string]*Query
+	Queries    map[string]*ReportQuery
 }
 
-// Query .
-type Query struct {
+// ReportQuery .
+type ReportQuery struct {
 	Name   string
 	Action string
 	Result struct {
@@ -74,29 +74,6 @@ type Query struct {
 		TotalChange int
 		Error       error
 	}
-}
-
-func queriesFromScenario(sr *mongodb.ScenarioReport) map[string]*Query {
-	queries := make(map[string]*Query)
-	for name, result := range sr.QueryResult {
-		query := &Query{
-			Name:   name,
-			Action: *result.Query.Action,
-			Result: struct {
-				Successful  bool
-				TotalTime   time.Duration
-				TotalChange int
-				Error       error
-			}{
-				Successful:  result.Error == nil,
-				TotalTime:   result.End.Sub(result.Start),
-				TotalChange: result.TotalChange,
-				Error:       result.Error,
-			},
-		}
-		queries[name] = query
-	}
-	return queries
 }
 
 func newCommandScenario() *cobra.Command {
@@ -133,9 +110,31 @@ func newCommandScenario() *cobra.Command {
 			ctx, cancelCtx := context.WithCancel(context.Background())
 
 			doneCh := make(chan struct{}, 0)
-			scenarioReport := mongodb.NewScenarioReport()
+			resultCh := make(chan *mongodb.Result, 0)
 
-			go client.RunScenario(ctx, scenario.Scenario, scenarioReport, doneCh)
+			queries := make(map[string]*ReportQuery)
+			go func() {
+				for result := range resultCh {
+					q := &ReportQuery{
+						Name:   *result.Query.Name,
+						Action: *result.Query.Action,
+						Result: struct {
+							Successful  bool
+							TotalTime   time.Duration
+							TotalChange int
+							Error       error
+						}{
+							Successful:  result.Error == nil,
+							TotalTime:   result.End.Sub(result.Start),
+							TotalChange: result.TotalChange,
+							Error:       result.Error,
+						},
+					}
+					queries[*result.Query.Name] = q
+				}
+			}()
+
+			go client.RunScenario(ctx, scenario.Scenario, resultCh, doneCh)
 
 			select {
 			case <-interruptCh:
@@ -149,7 +148,7 @@ func newCommandScenario() *cobra.Command {
 				Database:   *scenario.Scenario.Database,
 				Collection: *scenario.Scenario.Collection,
 				Parallel:   scenario.Scenario.Parallel,
-				Queries:    queriesFromScenario(scenarioReport),
+				Queries:    queries,
 			}
 
 			t, err := parseTemplates("report-template", reportTemplate, queryBlock)

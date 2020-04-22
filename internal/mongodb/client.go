@@ -121,54 +121,17 @@ type ScenarioQuery struct {
 	Meta   map[string]interface{}
 }
 
-// ScenarioReport .
-type ScenarioReport struct {
-	Error error
-
-	mu          *sync.Mutex
-	QueryResult map[string]*Result
-}
-
-// NewScenarioReport .
-func NewScenarioReport() *ScenarioReport {
-	return &ScenarioReport{
-		mu:          &sync.Mutex{},
-		QueryResult: make(map[string]*Result),
-	}
-}
-
-// SetError .
-func (r *ScenarioReport) SetError(err error) {
-	r.Error = err
-}
-
-// SetResult .
-func (r *ScenarioReport) SetResult(name string, res *Result) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.QueryResult[name] = res
-}
-
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, s *Scenario, report *ScenarioReport, done chan struct{}) {
+func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Result, done chan struct{}) error {
 	client, cleanFn, err := c.connect(ctx)
 	if err != nil {
-		report.SetError(err)
-		return
+		return err
 	}
 	defer cleanFn()
 
 	collection := client.Database(*s.Database).Collection(*s.Collection)
 	c.logger.Infof("using database: %v", *s.Database)
 	c.logger.Infof("using collection: %v", *s.Collection)
-
-	// Result Consumer
-	resultCh := make(chan *Result)
-	go func() {
-		for result := range resultCh {
-			report.SetResult(*result.Query.Name, result)
-		}
-	}()
 
 	// Query Producer
 	queryCh := make(chan *ScenarioQuery)
@@ -202,6 +165,7 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario, report *ScenarioR
 	wg.Wait()
 	close(resultCh)
 	close(done)
+	return nil
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) *Result {
