@@ -1,25 +1,26 @@
-package mongodb
+package scenario
 
 import (
 	"context"
+	"mongoperf/internal/scenario/query"
 	"sync"
 	"time"
 )
 
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, config *Config, resultCh chan *QueryResult) error {
+func (c *Client) RunScenario(ctx context.Context, config *Scenario, resultCh chan *query.Result) error {
 	collection := c.client.Database(*config.Database).Collection(*config.Collection)
 	c.logger.Infof("using database: %v", *config.Database)
 	c.logger.Infof("using collection: %v", *config.Collection)
 
 	// Query Producer
-	queryCh := make(chan *ConfigQuery, *config.BufferSize)
+	queryCh := make(chan *query.Query, *config.BufferSize)
 	go func() {
 		wg := &sync.WaitGroup{}
 		wg.Add(len(config.Queries))
 
-		for _, query := range config.Queries {
-			go func(q *ConfigQuery) {
+		for _, qq := range config.Queries {
+			go func(q *query.Query) {
 				defer wg.Done()
 
 				switch r := *q.Repeat; {
@@ -40,7 +41,7 @@ func (c *Client) RunScenario(ctx context.Context, config *Config, resultCh chan 
 						}
 					}
 				}
-			}(&query)
+			}(&qq)
 		}
 		wg.Wait()
 		// wait until all query are consumed
@@ -61,14 +62,15 @@ func (c *Client) RunScenario(ctx context.Context, config *Config, resultCh chan 
 		go func() {
 			defer wg.Done()
 
-			for query := range queryCh {
-				c.logger.Debugf("received query name: %v action: %v", *query.Name, *query.Action)
+			for config := range queryCh {
+				c.logger.Debugf("received query name: %v action: %v", *config.Name, *config.Action)
 
-				res := c.runQuery(context.TODO(), collection, query)
-				if res.Error != nil {
-					c.logger.Error(res.Error)
+				querier, err := query.NewQuerier(config)
+				if err != nil {
+					c.logger.Error(err)
+					continue
 				}
-				resultCh <- res
+				resultCh <- querier.Run(context.TODO(), collection)
 			}
 		}()
 	}
@@ -76,4 +78,9 @@ func (c *Client) RunScenario(ctx context.Context, config *Config, resultCh chan 
 	wg.Wait()
 	close(resultCh)
 	return nil
+}
+
+// Int .
+func Int(i int) *int {
+	return &i
 }
