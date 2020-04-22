@@ -71,3 +71,171 @@ Flags:
 
 Use "mongoperf [command] --help" for more information about a command.
 ```
+
+### Scenario Command
+Takes in a scenario configuration file and runs it.
+
+#### Schema
+The current schema is represented using a yaml configuration file.</br>
+It contains a single Scenario object. Here is an example:
+```
+---
+Scenario:
+  Database: test
+  Collection: test
+  Parallel: 2
+  BufferSize: 1000
+  Queries:
+  - Name: testmany
+    Action: InsertMany
+    Repeat: 10000
+    Meta:
+      Data:
+      - Name: Ash
+        Age: 10
+        City: Pallet Town
+      - Name: Misty
+        Age: 10
+        City: Cerulean City
+```
+
+A scenario declares the following mandatory parameters:
+- Database (string)
+  - A MongoDB database name.
+- Collection (string)
+  - A MongoDB collection name.
+- Parallel (int)
+  - The number of parallel workers to process queries.
+  - Must be greater than 0.
+- BufferSize (int)
+  - The size of the worker task queue.
+  - Must be equal or greater than 0.
+  - If 0, default value is set (1000).
+- Queries (List<Query>)
+
+A `Scenario` also declares a `Queries` attribute, which is a list of `Query` definition.
+```
+---
+Scenario:
+  ...escaped
+  Queries:
+  - Name: test
+    Action: InsertMany
+    Repeat: 2
+    Meta:
+  ...escaped
+```
+A query declares the following mandatory parameters:
+- Name (string)
+  - Used as an identifier for the query.
+- Action (string)
+  - Defines the action to perform against a collection. Available are:
+    - InsertOne
+    - InsertMany
+    - UpdateOne
+    - FindOne
+    - Find
+- Repeat (int)
+  - How many times should we create and send a query task to workers.
+  - Must be greater or equal to 0.
+  - If 0, infinite amount of queries will be generated.
+- Meta (Meta)
+  - An object specific to the Action provided.
+
+A `Query` also declares a `Meta` object which contains the payload specific data required by the Action provided.
+```
+---
+Scenario:
+  ...escaped
+  Queries:
+  ...escaped
+    Meta:
+      Data:
+      - Name: Ash
+        Age: 10
+        City: Pallet Town
+      - Name: Misty
+        Age: 10
+        City: Cerulean City
+      Options:
+        Ordered: true
+```
+
+Here is a list of schema used for each Action
+
+InsertOne
+  - Data (map)
+    - A map of key/values representing the document to insert.
+  - Options (map, optional)
+    - A map of key/values correspongind to the InsertOneOptions type.
+      - BypassDocumentValidation (bool)
+
+InsertMany
+  - Data (List<map>)
+    - A list of map of key/values representing the documents to insert.
+  - Options (map, optional)
+    - A map of key/values correspongind to the InsertManyOptions type.
+      - BypassDocumentValidation (bool)
+      - Ordered (bool)
+
+UpdateOne
+  - Data (map)
+    - A map of key/values representing a document containing update operators.
+  - Filter (map)
+    - A map of key/values representing the filter to apply.
+  - Options (map, optional)
+    - A map of key/values correspongind to the UpdateOptions type.
+      - ArrayFilters (ArrayFilters)
+      - BypassDocumentValidation (bool)
+      - Ordered (bool)
+      - Collation (Collation)
+      - Upsert (bool)
+
+FindOne
+  - Filter (map)
+    - A map of key/values representing the filter to apply.
+  - Options (map, optional)
+    - A map of key/values correspongind to the UpdateOptions type.
+      - AllowPartialResults (bool)
+      - BatchSize (int)
+      - Collation (Collation)
+      - Comment (string)
+      - CursorType (CursorType)
+      - Hint (string | map)
+      - Max (map)
+      - MaxAwaitTime (duration)
+      - MaxTime (duration)
+      - Min (map)
+      - NoCursorTimeout (bool)
+      - OplogReplay (bool)
+      - Projection (map)
+      - ReturnKey (bool)
+      - ShowRecordID (bool)
+      - Skip (int)
+      - Snapshot (bool)
+      - Sort (map)
+
+Find
+  - Filter (map)
+    - A map of key/values representing the filter to apply.
+  - Options (map, optional)
+    - A map of key/values correspongind to the UpdateOptions type.
+      - AllowPartialResults (bool)
+      - BatchSize (int)
+      - Collation (Collation)
+      - Comment (string)
+      - CursorType (CursorType)
+      - Hint (string | map)
+      - Limit (int)
+      - Max (map)
+      - MaxAwaitTime (duration)
+      - MaxTime (duration)
+      - Min (map)
+      - NoCursorTimeout (bool)
+      - OplogReplay (bool)
+      - Projection (map)
+      - ReturnKey (bool)
+      - ShowRecordID (bool)
+      - Skip (int)
+      - Snapshot (bool)
+      - Sort (map)
