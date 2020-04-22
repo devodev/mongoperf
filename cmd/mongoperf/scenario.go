@@ -52,14 +52,14 @@ var (
 
 	queryBlock = `
 {{ define "query" }}
-  > Name:        {{ .Name }}
-    Action:      {{ .Action }}
-    TotalQuery:  {{ .TotalQuery }}
-    TotalTime:   {{ .TotalTime }}
-    TotalChange: {{ .TotalChange }}
-    Successful:  {{ if .LastError }}false{{ else }}true{{ end }}
-    ErrorCount:  {{ .ErrorCount }}
-    LastError:   {{ if .LastError }}{{ .LastError.Error }}{{ else }}nil{{ end }}
+  > Name:              {{ .Name }}
+    Action:            {{ .Action }}
+    QueryCount:        {{ .QueryCount }}
+    ChangeCount:       {{ .ChangeCount }}
+    DurationTotal:     {{ .DurationTotal }}
+    Successful:        {{ if .LastError }}false{{ else }}true{{ end }}
+    ErrorCount:        {{ .ErrorCount }}
+    LastError:         {{ if .LastError }}{{ .LastError.Error }}{{ else }}nil{{ end }}
 {{ end }}
 `
 )
@@ -79,21 +79,21 @@ type ReportQuery struct {
 	Name   string
 	Action string
 
-	mu          *sync.Mutex
-	TotalTime   time.Duration
-	TotalQuery  int
-	TotalChange int
-	ErrorCount  int
-	LastError   error
+	mu            *sync.Mutex
+	DurationTotal time.Duration
+	QueryCount    int
+	ChangeCount   int
+	ErrorCount    int
+	LastError     error
 }
 
 // NewReportQuery .
 func NewReportQuery(name, action string) *ReportQuery {
 	return &ReportQuery{
-		Name:      name,
-		Action:    action,
-		mu:        &sync.Mutex{},
-		TotalTime: time.Duration(0),
+		Name:          name,
+		Action:        action,
+		mu:            &sync.Mutex{},
+		DurationTotal: time.Duration(0),
 	}
 }
 
@@ -101,9 +101,9 @@ func NewReportQuery(name, action string) *ReportQuery {
 func (rq *ReportQuery) Update(dur time.Duration, changes int, err error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
-	rq.TotalQuery++
-	rq.TotalTime += dur
-	rq.TotalChange += changes
+	rq.QueryCount++
+	rq.DurationTotal += dur
+	rq.ChangeCount += changes
 	if err != nil {
 		rq.ErrorCount++
 		rq.LastError = err
@@ -129,6 +129,12 @@ func newCommandScenario() *cobra.Command {
 
 			if scenario.Scenario.Parallel < 1 {
 				return fmt.Errorf("Scenario.Parallel must be greater than 0")
+			}
+			switch s := scenario.Scenario.BufferSize; {
+			case s < 0:
+				return fmt.Errorf("Scenario.BufferSize must be positive")
+			case s == 0:
+				scenario.Scenario.BufferSize = 1000
 			}
 
 			if uri == "" {
@@ -161,11 +167,17 @@ func newCommandScenario() *cobra.Command {
 				close(doneCh)
 			}()
 
+			go func() {
+				defer cancelCtx()
+				select {
+				case <-interruptCh:
+				case <-doneCh:
+				}
+			}()
+
 			select {
-			case <-interruptCh:
 			case <-doneCh:
 			}
-			cancelCtx()
 
 			report := &Report{
 				Version:    cmd.Parent().Version,

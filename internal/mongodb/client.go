@@ -111,6 +111,7 @@ type Scenario struct {
 	Database   *string
 	Collection *string
 	Parallel   int
+	BufferSize int
 	Queries    []*ScenarioQuery
 }
 
@@ -118,6 +119,7 @@ type Scenario struct {
 type ScenarioQuery struct {
 	Name   *string
 	Action *string
+	Repeat *int
 	Meta   map[string]interface{}
 }
 
@@ -134,10 +136,42 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Re
 	c.logger.Infof("using collection: %v", *s.Collection)
 
 	// Query Producer
-	queryCh := make(chan *ScenarioQuery)
+	queryCh := make(chan *ScenarioQuery, s.BufferSize)
 	go func() {
+		wg := &sync.WaitGroup{}
+		wg.Add(len(s.Queries))
+
 		for _, query := range s.Queries {
-			queryCh <- query
+			go func(q *ScenarioQuery) {
+				defer wg.Done()
+
+				switch r := *q.Repeat; {
+				default:
+					for i := 0; i < r; i++ {
+						select {
+						case queryCh <- q:
+						case <-ctx.Done():
+							return
+						}
+					}
+				case r < 1:
+					for {
+						select {
+						case queryCh <- q:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
+			}(query)
+		}
+		wg.Wait()
+		// wait until all query are consumed
+		for {
+			if len(queryCh) == 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
 		close(queryCh)
 	}()
@@ -153,7 +187,7 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario, resultCh chan *Re
 			for query := range queryCh {
 				c.logger.Infof("received query name: %v action: %v", *query.Name, *query.Action)
 
-				res := c.runQuery(ctx, collection, query)
+				res := c.runQuery(context.TODO(), collection, query)
 				if res.Error != nil {
 					c.logger.Error(res.Error)
 				}
