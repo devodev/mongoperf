@@ -25,13 +25,7 @@ type ScenarioQueryConfig struct {
 
 // RunScenario .
 func (c *Client) RunScenario(ctx context.Context, s *ScenarioConfig, resultCh chan *QueryResult) error {
-	client, cleanFn, err := c.connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer cleanFn()
-
-	collection := client.Database(*s.Database).Collection(*s.Collection)
+	collection := c.client.Database(*s.Database).Collection(*s.Collection)
 	c.logger.Infof("using database: %v", *s.Database)
 	c.logger.Infof("using collection: %v", *s.Collection)
 

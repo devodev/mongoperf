@@ -119,15 +119,13 @@ func newCommandScenario() *cobra.Command {
 		Short: "Run a scenario.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger := logrus.New()
-
+			// VALIDATE CONFIG
 			cfgFile := args[0]
 			scenario, err := getScenarioConfig(cfgFile)
 			if err != nil {
 				return err
 			}
 
-			// VALIDATE CONFIG
 			if scenario.Scenario.Parallel < 1 {
 				return fmt.Errorf("Scenario.Parallel must be greater than 0")
 			}
@@ -142,9 +140,18 @@ func newCommandScenario() *cobra.Command {
 			if uri == "" {
 				uri = "mongodb://localhost:27017"
 			}
-			logger.Printf("connecting to: %v", uri)
 
-			// SETUP CHANNEL AND HANDLERS
+			// CREATE LOGGER
+			logger := logrus.New()
+
+			// START CLIENT
+			logger.Printf("connecting to: %v", uri)
+			client, err := mongodb.NewClient(context.TODO(), uri, mongodb.WithLogger(logger))
+			if err != nil {
+				return err
+			}
+
+			// SETUP CHANNEL, CONTEXT AND HANDLERS
 			interruptCh := make(chan os.Signal, 1)
 			signal.Notify(interruptCh, os.Interrupt)
 
@@ -177,7 +184,6 @@ func newCommandScenario() *cobra.Command {
 			}()
 
 			// START SCENARIO
-			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 			go client.RunScenario(ctx, scenario.Scenario, resultCh)
 
 			// WAIT ON COMPLETION

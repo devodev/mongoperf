@@ -11,7 +11,7 @@ import (
 
 // Client .
 type Client struct {
-	uri    string
+	client *mongo.Client
 	logger *logrus.Logger
 }
 
@@ -29,54 +29,52 @@ func WithLogger(l *logrus.Logger) func(c *Client) {
 }
 
 // NewClient returns a new Client using the provided URI.
-func NewClient(uri string, options ...Option) *Client {
-	c := &Client{uri: uri}
+func NewClient(ctx context.Context, uri string, options ...Option) (*Client, error) {
+	c := &Client{}
+	err := c.connect(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
 	for _, opt := range options {
 		opt(c)
 	}
-	return c
+	return c, nil
 }
 
-func (c *Client) connect(ctx context.Context) (*mongo.Client, func() error, error) {
+func (c *Client) connect(ctx context.Context, uri string) error {
 	// Set client options
-	clientOptions := options.Client().ApplyURI(c.uri)
+	clientOptions := options.Client().ApplyURI(uri)
 
 	// Connect to MongoDB
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	// Check the connection
 	err = client.Ping(ctx, nil)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	// Create closure for cleanup
-	close := func() error {
-		err = client.Disconnect(ctx)
-		if err != nil {
-			c.logger.Error(err)
-			return err
-		}
-		c.logger.Info("Connection to MongoDB closed.")
-		return nil
+	c.client = client
+	return nil
+}
+
+// Close closes the underlying mongodb client connection.
+func (c *Client) Close(ctx context.Context) error {
+	err := c.client.Disconnect(ctx)
+	if err != nil {
+		return err
 	}
-	return client, close, nil
+	return nil
 }
 
 // RunDemo .
 func (c *Client) RunDemo(ctx context.Context, db, col string) error {
-	client, close, err := c.connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer close()
-
 	c.logger.Infof("Connected to MongoDB!")
 
 	// Get a collection
-	collection := client.Database(db).Collection(col)
+	collection := c.client.Database(db).Collection(col)
 
 	type Trainer struct {
 		Name string
