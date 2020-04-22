@@ -22,7 +22,9 @@ const (
 
 // UnmarshalYAML implements the yaml.Unmarshaller interface.
 func (a *Action) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	if err := unmarshal(a); err != nil {
+	type A Action
+	newAction := (*A)(a)
+	if err := unmarshal(&newAction); err != nil {
 		return err
 	}
 	if a == nil {
@@ -37,16 +39,18 @@ func (a *Action) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // Config .
 type Config struct {
-	Database   *string               `yaml:"Database"`
-	Collection *string               `yaml:"Collection"`
-	Parallel   *int                  `yaml:"Parallel,omitempty"`
-	BufferSize *int                  `yaml:"BufferSize,omitempty"`
-	Queries    []ScenarioQueryConfig `yaml:"Queries"`
+	Database   *string       `yaml:"Database"`
+	Collection *string       `yaml:"Collection"`
+	Parallel   *int          `yaml:"Parallel,omitempty"`
+	BufferSize *int          `yaml:"BufferSize,omitempty"`
+	Queries    []ConfigQuery `yaml:"Queries"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaller interface.
 func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	if err := unmarshal(c); err != nil {
+	type C Config
+	newConfig := (*C)(c)
+	if err := unmarshal(&newConfig); err != nil {
 		return err
 	}
 	if c.Database == nil {
@@ -85,7 +89,9 @@ type ConfigQuery struct {
 
 // UnmarshalYAML implements the yaml.Unmarshaller interface.
 func (c *ConfigQuery) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	if err := unmarshal(c); err != nil {
+	type C ConfigQuery
+	newConfig := (*C)(c)
+	if err := unmarshal(&newConfig); err != nil {
 		return err
 	}
 	if c.Name == nil {

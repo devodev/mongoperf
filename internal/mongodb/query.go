@@ -12,7 +12,7 @@ import (
 
 // QueryResult .
 type QueryResult struct {
-	Query *ScenarioQueryConfig
+	Query *ConfigQuery
 
 	Start       time.Time
 	End         time.Time
@@ -20,8 +20,8 @@ type QueryResult struct {
 	Error       error
 }
 
-// NewResult .
-func NewResult(q *ScenarioQueryConfig) *QueryResult {
+// NewQueryResult .
+func NewQueryResult(q *ConfigQuery) *QueryResult {
 	return &QueryResult{
 		Query: q,
 		Start: time.Now(),
@@ -47,8 +47,8 @@ func (r *QueryResult) setEnd() {
 	r.End = time.Now()
 }
 
-func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQueryConfig) *QueryResult {
-	result := NewResult(q)
+func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ConfigQuery) *QueryResult {
+	result := NewQueryResult(q)
 	switch a := q.Action; {
 	default:
 		return result.WithError(fmt.Errorf("scenario action not supported: %v", *a))

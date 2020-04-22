@@ -13,7 +13,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -119,21 +118,11 @@ func newCommandScenario() *cobra.Command {
 		Short: "Run a scenario.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// VALIDATE CONFIG
+			// PARSE CONFIG
 			cfgFile := args[0]
-			scenario, err := getScenarioConfig(cfgFile)
+			config, err := mongodb.ParseConfigFile(cfgFile)
 			if err != nil {
 				return err
-			}
-
-			if scenario.Scenario.Parallel < 1 {
-				return fmt.Errorf("Scenario.Parallel must be greater than 0")
-			}
-			switch s := scenario.Scenario.BufferSize; {
-			case s < 0:
-				return fmt.Errorf("Scenario.BufferSize must be positive")
-			case s == 0:
-				scenario.Scenario.BufferSize = 1000
 			}
 
 			// VALIDATE COMMAND LINE ARGS
@@ -174,7 +163,7 @@ func newCommandScenario() *cobra.Command {
 				for result := range resultCh {
 					rq, ok := queries[*result.Query.Name]
 					if !ok {
-						rq = NewReportQuery(*result.Query.Name, *result.Query.Action)
+						rq = NewReportQuery(*result.Query.Name, string(*result.Query.Action))
 					}
 					delta := result.End.Sub(result.Start)
 					rq.Update(delta, result.TotalChange, result.Error)
@@ -184,7 +173,7 @@ func newCommandScenario() *cobra.Command {
 			}()
 
 			// START SCENARIO
-			go client.RunScenario(ctx, scenario.Scenario, resultCh)
+			go client.RunScenario(ctx, config, resultCh)
 
 			// WAIT ON COMPLETION
 			select {
@@ -195,9 +184,9 @@ func newCommandScenario() *cobra.Command {
 			report := &Report{
 				Version:    cmd.Parent().Version,
 				URI:        uri,
-				Database:   *scenario.Scenario.Database,
-				Collection: *scenario.Scenario.Collection,
-				Parallel:   scenario.Scenario.Parallel,
+				Database:   *config.Database,
+				Collection: *config.Collection,
+				Parallel:   *config.Parallel,
 				Queries:    queries,
 			}
 
@@ -231,24 +220,4 @@ func parseTemplates(name string, tmpl ...string) (*template.Template, error) {
 		}
 	}
 	return t, nil
-}
-
-func getScenarioConfig(cfgFile string) (*scenarioConfig, error) {
-	viperInstance := viper.New()
-	viperInstance.SetConfigFile(cfgFile)
-
-	err := viperInstance.ReadInConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	var config scenarioConfig
-	if err := viperInstance.UnmarshalExact(&config); err != nil {
-		return nil, err
-	}
-	return &config, nil
-}
-
-type scenarioConfig struct {
-	Scenario *mongodb.ScenarioConfig
 }
