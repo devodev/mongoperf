@@ -73,3 +73,8 @@ func ParseConfig(b []byte) (*Scenario, error) {
 	}
 	return &c, nil
 }
+
+// Int .
+func Int(i int) *int {
+	return &i
+}

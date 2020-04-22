@@ -79,8 +79,3 @@ func (c *Client) RunScenario(ctx context.Context, config *Scenario, resultCh cha
 	close(resultCh)
 	return nil
 }
-
-// Int .
-func Int(i int) *int {
-	return &i
-}
