@@ -150,13 +150,11 @@ func (r *ScenarioReport) SetResult(name string, res *Result) {
 }
 
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
-	report := NewScenarioReport()
-
+func (c *Client) RunScenario(ctx context.Context, s *Scenario, report *ScenarioReport, done chan struct{}) {
 	client, cleanFn, err := c.connect(ctx)
 	if err != nil {
 		report.SetError(err)
-		return report
+		return
 	}
 	defer cleanFn()
 
@@ -203,7 +201,7 @@ func (c *Client) RunScenario(ctx context.Context, s *Scenario) *ScenarioReport {
 
 	wg.Wait()
 	close(resultCh)
-	return report
+	close(done)
 }
 
 func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *ScenarioQuery) *Result {

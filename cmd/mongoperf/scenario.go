@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"text/template"
 	"time"
 
@@ -125,10 +127,21 @@ func newCommandScenario() *cobra.Command {
 
 			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 
-			scenarioReport := client.RunScenario(context.TODO(), scenario.Scenario)
-			if scenarioReport.Error != nil {
-				return err
+			interrupt := make(chan os.Signal, 1)
+			signal.Notify(interrupt, os.Interrupt)
+
+			ctx, cancelFn := context.WithCancel(context.Background())
+
+			done := make(chan struct{}, 0)
+			scenarioReport := mongodb.NewScenarioReport()
+
+			go client.RunScenario(ctx, scenario.Scenario, scenarioReport, done)
+
+			select {
+			case <-interrupt:
+			case <-done:
 			}
+			cancelFn()
 
 			report := &Report{
 				Version:    cmd.Parent().Version,
