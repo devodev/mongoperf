@@ -51,5 +51,5 @@ func newCommandDemo() *cobra.Command {
 }
 
 type config struct {
-	Scenarios []*mongodb.Scenario
+	Scenarios []*mongodb.ScenarioConfig
 }

@@ -127,6 +127,7 @@ func newCommandScenario() *cobra.Command {
 				return err
 			}
 
+			// VALIDATE CONFIG
 			if scenario.Scenario.Parallel < 1 {
 				return fmt.Errorf("Scenario.Parallel must be greater than 0")
 			}
@@ -137,22 +138,30 @@ func newCommandScenario() *cobra.Command {
 				scenario.Scenario.BufferSize = 1000
 			}
 
+			// VALIDATE COMMAND LINE ARGS
 			if uri == "" {
 				uri = "mongodb://localhost:27017"
 			}
 			logger.Printf("connecting to: %v", uri)
 
+			// SETUP CHANNEL AND HANDLERS
 			interruptCh := make(chan os.Signal, 1)
 			signal.Notify(interruptCh, os.Interrupt)
 
-			ctx, cancelCtx := context.WithCancel(context.Background())
-
 			doneCh := make(chan struct{}, 0)
-			resultCh := make(chan *mongodb.Result, 0)
+			resultCh := make(chan *mongodb.QueryResult, 0)
 
-			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
-			go client.RunScenario(ctx, scenario.Scenario, resultCh)
+			// START INTERRUPT HANDLER
+			ctx, cancelCtx := context.WithCancel(context.Background())
+			go func() {
+				defer cancelCtx()
+				select {
+				case <-interruptCh:
+				case <-doneCh:
+				}
+			}()
 
+			// START RESULT PROCESSING
 			queries := make(map[string]*ReportQuery)
 			go func() {
 				for result := range resultCh {
@@ -167,18 +176,16 @@ func newCommandScenario() *cobra.Command {
 				close(doneCh)
 			}()
 
-			go func() {
-				defer cancelCtx()
-				select {
-				case <-interruptCh:
-				case <-doneCh:
-				}
-			}()
+			// START SCENARIO
+			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
+			go client.RunScenario(ctx, scenario.Scenario, resultCh)
 
+			// WAIT ON COMPLETION
 			select {
 			case <-doneCh:
 			}
 
+			// GENERATE REPORT
 			report := &Report{
 				Version:    cmd.Parent().Version,
 				URI:        uri,
@@ -237,5 +244,5 @@ func getScenarioConfig(cfgFile string) (*scenarioConfig, error) {
 }
 
 type scenarioConfig struct {
-	Scenario *mongodb.Scenario
+	Scenario *mongodb.ScenarioConfig
 }
