@@ -25,4 +25,4 @@ RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
 ENV GOPATH /srv
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
-WORKDIR /srv/src/github.com/devodev/mongo-tester
+WORKDIR /srv/src/github.com/devodev/mongoperf
