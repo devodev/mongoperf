@@ -112,7 +112,8 @@ func (rq *ReportQuery) Update(dur time.Duration, changes int, err error) {
 
 func newCommandScenario() *cobra.Command {
 	var (
-		uri string
+		uri     string
+		isDebug bool
 	)
 	cmd := &cobra.Command{
 		Use:   "scenario [scenario-file]",
@@ -143,6 +144,9 @@ func newCommandScenario() *cobra.Command {
 
 			// CREATE LOGGER
 			logger := logrus.New()
+			if isDebug {
+				logger.SetLevel(logrus.DebugLevel)
+			}
 
 			// START CLIENT
 			logger.Printf("connecting to: %v", uri)
@@ -212,6 +216,7 @@ func newCommandScenario() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&uri, "uri", "", "MongoDB URI connection string.")
+	cmd.Flags().BoolVar(&isDebug, "debug", false, "Set logger level to DEBUG.")
 	return cmd
 }
 

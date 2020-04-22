@@ -73,13 +73,13 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.InsertOne()
 		}
-		c.logger.Infof("query meta: %+v", meta)
+		c.logger.Debugf("query meta: %+v", meta)
 
 		insertResult, err := collection.InsertOne(ctx, meta.Data, meta.Options)
 		if err != nil {
 			return result.WithError(err)
 		}
-		c.logger.Infof("Inserted a single document: %v", insertResult.InsertedID)
+		c.logger.Debugf("Inserted a single document: %v", insertResult.InsertedID)
 		return result.WithResult(1)
 	case *a == "InsertMany":
 		payload := q.Meta
@@ -102,13 +102,13 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.InsertMany()
 		}
-		c.logger.Infof("query meta: %+v", meta)
+		c.logger.Debugf("query meta: %+v", meta)
 
 		insertManyResult, err := collection.InsertMany(ctx, meta.Data, meta.Options)
 		if err != nil {
 			return result.WithError(err)
 		}
-		c.logger.Infof("Inserted multiple documents: %v", insertManyResult.InsertedIDs)
+		c.logger.Debugf("Inserted multiple documents: %v", insertManyResult.InsertedIDs)
 		return result.WithResult(len(insertManyResult.InsertedIDs))
 	case *a == "UpdateOne":
 		payload := q.Meta
@@ -132,13 +132,13 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.Update()
 		}
-		c.logger.Infof("query meta: %+v", meta)
+		c.logger.Debugf("query meta: %+v", meta)
 
 		updateResult, err := collection.UpdateOne(ctx, meta.Filter, meta.Data, meta.Options)
 		if err != nil {
 			return result.WithError(err)
 		}
-		c.logger.Infof("Matched %v documents and updated %v documents", updateResult.MatchedCount, updateResult.ModifiedCount)
+		c.logger.Debugf("Matched %v documents and updated %v documents", updateResult.MatchedCount, updateResult.ModifiedCount)
 		return result.WithResult(int(updateResult.ModifiedCount))
 	case *a == "FindOne":
 		payload := q.Meta
@@ -158,14 +158,14 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.FindOne()
 		}
-		c.logger.Infof("query meta: %+v", meta)
+		c.logger.Debugf("query meta: %+v", meta)
 
 		var findResult map[string]interface{}
 		err := collection.FindOne(ctx, meta.Filter, meta.Options).Decode(&findResult)
 		if err != nil {
 			return result.WithError(err)
 		}
-		c.logger.Infof("Found a single document: %+v", findResult)
+		c.logger.Debugf("Found a single document: %+v", findResult)
 		return result.WithResult(1)
 	case *a == "Find":
 		payload := q.Meta
@@ -185,7 +185,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if meta.Options == nil {
 			meta.Options = options.Find()
 		}
-		c.logger.Infof("query meta: %+v", meta)
+		c.logger.Debugf("query meta: %+v", meta)
 
 		cur, err := collection.Find(ctx, meta.Filter, meta.Options)
 		if err != nil {
@@ -205,7 +205,7 @@ func (c *Client) runQuery(ctx context.Context, collection *mongo.Collection, q *
 		if err := cur.Err(); err != nil {
 			return result.WithError(err)
 		}
-		c.logger.Infof("Found multiple documents (array of pointers): %+v", results)
+		c.logger.Debugf("Found multiple documents (array of pointers): %+v", results)
 		return result.WithResult(len(results))
 	}
 }

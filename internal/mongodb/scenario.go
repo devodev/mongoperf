@@ -79,7 +79,7 @@ func (c *Client) RunScenario(ctx context.Context, s *ScenarioConfig, resultCh ch
 			defer wg.Done()
 
 			for query := range queryCh {
-				c.logger.Infof("received query name: %v action: %v", *query.Name, *query.Action)
+				c.logger.Debugf("received query name: %v action: %v", *query.Name, *query.Action)
 
 				res := c.runQuery(context.TODO(), collection, query)
 				if res.Error != nil {

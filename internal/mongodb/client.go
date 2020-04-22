@@ -71,8 +71,6 @@ func (c *Client) Close(ctx context.Context) error {
 
 // RunDemo .
 func (c *Client) RunDemo(ctx context.Context, db, col string) error {
-	c.logger.Infof("Connected to MongoDB!")
-
 	// Get a collection
 	collection := c.client.Database(db).Collection(col)
 
