@@ -102,8 +102,6 @@ func newCommandScenario() *cobra.Command {
 			}
 			logger.Printf("connecting to: %v", uri)
 
-			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
-
 			interruptCh := make(chan os.Signal, 1)
 			signal.Notify(interruptCh, os.Interrupt)
 
@@ -112,6 +110,7 @@ func newCommandScenario() *cobra.Command {
 			doneCh := make(chan struct{}, 0)
 			resultCh := make(chan *mongodb.Result, 0)
 
+			client := mongodb.NewClient(uri, mongodb.WithLogger(logger))
 			go client.RunScenario(ctx, scenario.Scenario, resultCh)
 
 			queries := make(map[string]*ReportQuery)
