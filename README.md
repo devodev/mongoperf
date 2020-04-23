@@ -100,19 +100,19 @@ Queries:
       City: Cerulean City
 ```
 
-A scenario declares the following mandatory parameters:
+A scenario declares the following attributes:
 - Database (string)
   - A MongoDB database name.
 - Collection (string)
   - A MongoDB collection name.
-- Parallel (int)
+- Parallel (int, optional) (default: 1)
   - The number of parallel workers to process queries.
   - Must be greater than 0.
-- BufferSize (int)
+- BufferSize (int, optional) (default: 1000)
   - The size of the worker task queue.
   - Must be greater than or equal to 0.
   - If 0, default value is set (1000).
-- Repeat (int)
+- Repeat (int, optional) (default: 1)
   - How many times should we run the queries.
   - Must be greater than or equal to 0.
   - If 0, repeats indefinitely.
@@ -129,7 +129,7 @@ Queries:
   Meta:
 ...escaped
 ```
-A query declares the following mandatory parameters:
+A query declares the following attributes:
 - Name (string)
   - Used as an identifier for the query.
 - Action (string)
@@ -142,7 +142,7 @@ A query declares the following mandatory parameters:
 - Meta (Meta)
   - An object specific to the Action provided.
 
-A `Query` also declares a `Meta` object which contains the payload specific data required by the Action provided.
+A `Query` also declares a `Meta` object which contains the payload specific attributes required by the specified Action attriobte.
 ```
 ---
 ...escaped
