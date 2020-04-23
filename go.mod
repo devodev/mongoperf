@@ -1,4 +1,4 @@
-module mongo-tester
+module mongoperf
 
 go 1.13
 
