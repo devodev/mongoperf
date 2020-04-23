@@ -71,7 +71,7 @@ func (c *Client) Close(ctx context.Context) error {
 }
 
 // RunScenario .
-func (c *Client) RunScenario(ctx context.Context, scenario *Scenario) (map[string]*ReportQuery, error) {
+func (c *Client) RunScenario(ctx context.Context, scenario *Scenario) (map[string]*ReportAggregator, error) {
 	collection := c.client.Database(*scenario.Database).Collection(*scenario.Collection)
 	c.logger.Infof("using database: %v", *scenario.Database)
 	c.logger.Infof("using collection: %v", *scenario.Collection)
@@ -88,7 +88,7 @@ func (c *Client) RunScenario(ctx context.Context, scenario *Scenario) (map[strin
 	dataCh := make(chan query.Querier, bufferSize)
 	resultCh := make(chan *query.Result, 0)
 
-	queriers := make(map[string]*ReportQuery)
+	results := make(map[string]*ReportAggregator)
 
 	// stop signals the producer to stop sending
 	// it can be called multiple times
@@ -158,20 +158,24 @@ func (c *Client) RunScenario(ctx context.Context, scenario *Scenario) (map[strin
 	}
 
 	// Add/Update ReportQuery
-	go func(q map[string]*ReportQuery) {
+	wgResults := &sync.WaitGroup{}
+	wgResults.Add(1)
+	go func(r map[string]*ReportAggregator) {
+		defer wgResults.Done()
 		for result := range resultCh {
-			rq, ok := q[*result.Query.Name]
+			rq, ok := r[*result.Definition.Name]
 			if !ok {
-				rq = NewReportQuery(*result.Query.Name, string(*result.Query.Action))
+				rq = NewReportQuery(result.Definition, numConsumers)
 			}
 			delta := result.End.Sub(result.Start)
 			rq.Update(delta, result.TotalChange, result.Error)
-			q[*result.Query.Name] = rq
+			r[*result.Definition.Name] = rq
 		}
-	}(queriers)
+	}(results)
 
 	wg.Wait()
 	close(resultCh)
+	wgResults.Wait()
 
-	return queriers, nil
+	return results, nil
 }

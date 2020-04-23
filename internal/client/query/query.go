@@ -96,7 +96,7 @@ func NewQuerier(config *Definition) (Querier, error) {
 
 // Result .
 type Result struct {
-	Query *Definition
+	Definition *Definition
 
 	Start       time.Time
 	End         time.Time
@@ -107,9 +107,9 @@ type Result struct {
 // NewQueryResult .
 func NewQueryResult(q *Definition) *Result {
 	return &Result{
-		Query: q,
-		Start: time.Now(),
-		End:   time.Time{},
+		Definition: q,
+		Start:      time.Now(),
+		End:        time.Time{},
 	}
 }
 

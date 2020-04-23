@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"io"
+	"mongoperf/internal/client/query"
 	"sync"
 	"text/template"
 	"time"
@@ -26,7 +27,7 @@ var (
 ---------------------------------------
   Queries
 ---------------------------------------
-{{ with .Queries -}}
+{{ with .Results -}}
 {{ range . -}}
 {{ block "query" . }}{{ end }}
 {{- end }}
@@ -40,6 +41,7 @@ var (
     Database:   {{ .Database }}
     Collection: {{ .Collection }}
     Parallel:   {{ .Parallel }}
+    Repeat:     {{ .Repeat }}
 {{ end }}
 `
 
@@ -48,11 +50,14 @@ var (
   > Name:              {{ .Name }}
     Action:            {{ .Action }}
     QueryCount:        {{ .QueryCount }}
+    QueryAvg:          {{ .QueryAvg }}
     ChangeCount:       {{ .ChangeCount }}
-    DurationTotal:     {{ .DurationTotal }}
-    Successful:        {{ if .LastError }}false{{ else }}true{{ end }}
+    ChangeAvg:         {{ .ChangeAvg }}
+    EPS:               {{ .EPS }}
+    TotalTime:         {{ .TotalTime }}
+    Successful:        {{ .Successful }}
     ErrorCount:        {{ .ErrorCount }}
-    LastError:         {{ if .LastError }}{{ .LastError.Error }}{{ else }}nil{{ end }}
+    LastError:         {{ .LastError }}
 {{ end }}
 `
 )
@@ -64,38 +69,101 @@ type Report struct {
 	Database   string
 	Collection string
 	Parallel   int
-	Queries    map[string]*ReportQuery
+	Repeat     int
+	Results    []*ReportQueryResult
 }
 
-// ReportQuery .
-type ReportQuery struct {
-	Name   string
-	Action string
+// NewReport .
+func NewReport(version, uri string, s *Scenario, results map[string]*ReportAggregator) *Report {
+	r := &Report{
+		Version:    version,
+		URI:        uri,
+		Database:   *s.Database,
+		Collection: *s.Collection,
+		Parallel:   *s.Parallel,
+		Repeat:     *s.Repeat,
+	}
+	for _, res := range results {
+		err := "nil"
+		success := res.LastError == nil
+		if !success {
+			err = res.LastError.Error()
+		}
+		totalTime := time.Duration(int64(res.WorkTotal) / int64(*s.Parallel))
+		queryAvg := time.Duration(0)
+		if res.QueryCount > 0 {
+			queryAvg = time.Duration(int64(totalTime) / int64(res.QueryCount))
+		}
+		changeAvg := time.Duration(0)
+		if res.ChangeCount > 0 {
+			changeAvg = time.Duration(int64(totalTime) / int64(res.ChangeCount))
+		}
+		eps := float64(0)
+		if totalTime > 0 {
+			eps = float64(res.QueryCount) / totalTime.Seconds()
+		}
+		rqr := &ReportQueryResult{
+			Name:        *res.Definition.Name,
+			Action:      string(*res.Definition.Action),
+			QueryCount:  res.QueryCount,
+			QueryAvg:    queryAvg,
+			ChangeCount: res.ChangeCount,
+			ChangeAvg:   changeAvg,
+			EPS:         eps,
+			TotalTime:   totalTime,
+			Successful:  success,
+			ErrorCount:  res.ErrorCount,
+			LastError:   err,
+		}
+		r.Results = append(r.Results, rqr)
+	}
+	return r
+}
 
-	mu            *sync.Mutex
-	DurationTotal time.Duration
-	QueryCount    int
-	ChangeCount   int
-	ErrorCount    int
-	LastError     error
+// ReportQueryResult .
+type ReportQueryResult struct {
+	Name        string
+	Action      string
+	QueryCount  int
+	QueryAvg    time.Duration
+	ChangeCount int
+	ChangeAvg   time.Duration
+	EPS         float64
+	TotalTime   time.Duration
+	Successful  bool
+	ErrorCount  int
+	LastError   string
+}
+
+// ReportAggregator .
+type ReportAggregator struct {
+	Definition  *query.Definition
+	WorkerCount int
+
+	mu          *sync.Mutex
+	WorkTotal   time.Duration
+	QueryCount  int
+	ChangeCount int
+	ErrorCount  int
+	LastError   error
 }
 
 // NewReportQuery .
-func NewReportQuery(name, action string) *ReportQuery {
-	return &ReportQuery{
-		Name:          name,
-		Action:        action,
-		mu:            &sync.Mutex{},
-		DurationTotal: time.Duration(0),
+func NewReportQuery(d *query.Definition, c int) *ReportAggregator {
+	return &ReportAggregator{
+		Definition:  d,
+		WorkerCount: c,
+		mu:          &sync.Mutex{},
+		WorkTotal:   time.Duration(0),
 	}
 }
 
 // Update .
-func (rq *ReportQuery) Update(dur time.Duration, changes int, err error) {
+func (rq *ReportAggregator) Update(dur time.Duration, changes int, err error) {
 	rq.mu.Lock()
 	defer rq.mu.Unlock()
 	rq.QueryCount++
-	rq.DurationTotal += dur
+	rq.WorkTotal += dur
 	rq.ChangeCount += changes
 	if err != nil {
 		rq.ErrorCount++

@@ -57,18 +57,10 @@ func newCommandScenario() *cobra.Command {
 			}()
 
 			// RUN SCENARIO
-			queries, err := c.RunScenario(ctx, scenario)
+			queryResults, err := c.RunScenario(ctx, scenario)
 
 			// GENERATE REPORT
-			report := &client.Report{
-				Version:    cmd.Parent().Version,
-				URI:        uri,
-				Database:   *scenario.Database,
-				Collection: *scenario.Collection,
-				Parallel:   *scenario.Parallel,
-				Queries:    queries,
-			}
-
+			report := client.NewReport(cmd.Parent().Version, uri, scenario, queryResults)
 			if err := client.GenerateReport(defaultOutput, report); err != nil {
 				return err
 			}
