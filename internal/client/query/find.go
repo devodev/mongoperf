@@ -16,7 +16,7 @@ type FindMeta struct {
 
 // FindQuery .
 type FindQuery struct {
-	config *Query
+	config *Definition
 	meta   *FindMeta
 }
 
@@ -45,7 +45,7 @@ func (q *FindQuery) Run(ctx context.Context, col *mongo.Collection) *Result {
 }
 
 // NewFindQuery .
-func NewFindQuery(config *Query) (Querier, error) {
+func NewFindQuery(config *Definition) (Querier, error) {
 	var meta FindMeta
 	if err := mapstructure.Decode(config.Meta, &meta); err != nil {
 		return nil, err

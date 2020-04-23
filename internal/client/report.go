@@ -1,7 +1,8 @@
-package scenario
+package client
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"text/template"
 	"time"
@@ -9,7 +10,7 @@ import (
 
 // Templates .
 var (
-	ReportTemplate = `
+	reportTemplate = `
 =======================================
   Scenario Report
 =======================================
@@ -33,7 +34,7 @@ var (
 =======================================
 `
 
-	ConfigBlock = `
+	configBlock = `
 {{ define "config" }}
     URI:        {{ .URI }}
     Database:   {{ .Database }}
@@ -42,7 +43,7 @@ var (
 {{ end }}
 `
 
-	QueryBlock = `
+	queryBlock = `
 {{ define "query" }}
   > Name:              {{ .Name }}
     Action:            {{ .Action }}
@@ -102,8 +103,7 @@ func (rq *ReportQuery) Update(dur time.Duration, changes int, err error) {
 	}
 }
 
-// ParseTemplates .
-func ParseTemplates(name string, tmpl ...string) (*template.Template, error) {
+func parseTemplates(name string, tmpl ...string) (*template.Template, error) {
 	if len(tmpl) == 0 {
 		return nil, fmt.Errorf("no templates provided")
 	}
@@ -119,4 +119,17 @@ func ParseTemplates(name string, tmpl ...string) (*template.Template, error) {
 		}
 	}
 	return t, nil
+}
+
+// GenerateReport .
+func GenerateReport(w io.Writer, r *Report) error {
+	templates := []string{reportTemplate, configBlock, queryBlock}
+	t, err := parseTemplates("report-template", templates...)
+	if err != nil {
+		return err
+	}
+	if err := t.Execute(w, r); err != nil {
+		return err
+	}
+	return nil
 }

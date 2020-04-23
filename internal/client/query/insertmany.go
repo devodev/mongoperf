@@ -17,7 +17,7 @@ type InsertManyMeta struct {
 
 // InsertManyQuery .
 type InsertManyQuery struct {
-	config *Query
+	config *Definition
 	meta   *InsertManyMeta
 }
 
@@ -35,7 +35,7 @@ func (q *InsertManyQuery) Run(ctx context.Context, col *mongo.Collection) *Resul
 }
 
 // NewInsertManyQuery .
-func NewInsertManyQuery(config *Query) (Querier, error) {
+func NewInsertManyQuery(config *Definition) (Querier, error) {
 	var meta InsertManyMeta
 	if err := mapstructure.Decode(config.Meta, &meta); err != nil {
 		return nil, err

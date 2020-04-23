@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"mongoperf/internal/scenario"
-	"mongoperf/internal/scenario/query"
+	"mongoperf/internal/client"
 	"os"
 	"os/signal"
 
@@ -18,12 +17,12 @@ func newCommandScenario() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "scenario [scenario-file]",
-		Short: "Run a scenario.",
+		Short: "Run a client.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// PARSE CONFIG
 			cfgFile := args[0]
-			config, err := scenario.ParseConfigFile(cfgFile)
+			scenario, err := client.ParseScenarioFile(cfgFile)
 			if err != nil {
 				return err
 			}
@@ -41,67 +40,36 @@ func newCommandScenario() *cobra.Command {
 
 			// START CLIENT
 			logger.Printf("connecting to: %v", uri)
-			client, err := scenario.NewClient(context.TODO(), uri, scenario.WithLogger(logger))
+			c, err := client.New(context.TODO(), uri, client.WithLogger(logger))
 			if err != nil {
 				return err
 			}
 
-			// SETUP CHANNEL, CONTEXT AND HANDLERS
-			interruptCh := make(chan os.Signal, 1)
-			signal.Notify(interruptCh, os.Interrupt)
-
-			doneCh := make(chan struct{}, 0)
-			resultCh := make(chan *query.Result, 0)
-
-			// START INTERRUPT HANDLER
+			// SETUP INTERRUPT HANDLER
+			interruptCh := getInterruptCh()
 			ctx, cancelCtx := context.WithCancel(context.Background())
+
 			go func() {
-				defer cancelCtx()
 				select {
 				case <-interruptCh:
-				case <-doneCh:
+					cancelCtx()
 				}
 			}()
 
-			// START RESULT PROCESSING
-			queries := make(map[string]*scenario.ReportQuery)
-			go func() {
-				for result := range resultCh {
-					rq, ok := queries[*result.Query.Name]
-					if !ok {
-						rq = scenario.NewReportQuery(*result.Query.Name, string(*result.Query.Action))
-					}
-					delta := result.End.Sub(result.Start)
-					rq.Update(delta, result.TotalChange, result.Error)
-					queries[*result.Query.Name] = rq
-				}
-				close(doneCh)
-			}()
-
-			// START SCENARIO
-			go client.RunScenario(ctx, config, resultCh)
-
-			// WAIT ON COMPLETION
-			select {
-			case <-doneCh:
-			}
+			// RUN SCENARIO
+			queries, err := c.RunScenario(ctx, scenario)
 
 			// GENERATE REPORT
-			report := &scenario.Report{
+			report := &client.Report{
 				Version:    cmd.Parent().Version,
 				URI:        uri,
-				Database:   *config.Database,
-				Collection: *config.Collection,
-				Parallel:   *config.Parallel,
+				Database:   *scenario.Database,
+				Collection: *scenario.Collection,
+				Parallel:   *scenario.Parallel,
 				Queries:    queries,
 			}
 
-			templates := []string{scenario.ReportTemplate, scenario.ConfigBlock, scenario.QueryBlock}
-			t, err := scenario.ParseTemplates("report-template", templates...)
-			if err != nil {
-				return err
-			}
-			if err := t.Execute(defaultOutput, report); err != nil {
+			if err := client.GenerateReport(defaultOutput, report); err != nil {
 				return err
 			}
 			return nil
@@ -110,4 +78,10 @@ func newCommandScenario() *cobra.Command {
 	cmd.Flags().StringVar(&uri, "uri", "", "MongoDB URI connection string.")
 	cmd.Flags().BoolVar(&isDebug, "debug", false, "Set logger level to DEBUG.")
 	return cmd
+}
+
+func getInterruptCh() <-chan os.Signal {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	return sigChan
 }

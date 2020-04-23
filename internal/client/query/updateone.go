@@ -18,7 +18,7 @@ type UpdateOneMeta struct {
 
 // UpdateOneQuery .
 type UpdateOneQuery struct {
-	config *Query
+	config *Definition
 	meta   *UpdateOneMeta
 }
 
@@ -33,7 +33,7 @@ func (q *UpdateOneQuery) Run(ctx context.Context, col *mongo.Collection) *Result
 }
 
 // NewUpdateOneQuery .
-func NewUpdateOneQuery(config *Query) (Querier, error) {
+func NewUpdateOneQuery(config *Definition) (Querier, error) {
 	var meta UpdateOneMeta
 	if err := mapstructure.Decode(config.Meta, &meta); err != nil {
 		return nil, err

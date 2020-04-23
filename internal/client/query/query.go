@@ -8,30 +8,22 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// Query .
-type Query struct {
+// Definition .
+type Definition struct {
 	Name   *string                `yaml:"Name"`
 	Action *Action                `yaml:"Action"`
-	Repeat *int                   `yaml:"Repeat,omitempty"`
 	Meta   map[string]interface{} `yaml:"Meta"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaller interface.
-func (c *Query) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	type C Query
+func (c *Definition) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type C Definition
 	newConfig := (*C)(c)
 	if err := unmarshal(&newConfig); err != nil {
 		return err
 	}
 	if c.Name == nil {
 		return fmt.Errorf("Name must not be empty")
-	}
-	switch r := c.Repeat; {
-	case r == nil:
-		c.Repeat = Int(1)
-	case *r < 0:
-		return fmt.Errorf("Repeat must be greater or equal to 0")
-	default:
 	}
 	return nil
 }
@@ -71,7 +63,7 @@ type Querier interface {
 }
 
 // NewQuerier .
-func NewQuerier(config *Query) (Querier, error) {
+func NewQuerier(config *Definition) (Querier, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config is nil")
 	}
@@ -104,7 +96,7 @@ func NewQuerier(config *Query) (Querier, error) {
 
 // Result .
 type Result struct {
-	Query *Query
+	Query *Definition
 
 	Start       time.Time
 	End         time.Time
@@ -113,7 +105,7 @@ type Result struct {
 }
 
 // NewQueryResult .
-func NewQueryResult(q *Query) *Result {
+func NewQueryResult(q *Definition) *Result {
 	return &Result{
 		Query: q,
 		Start: time.Now(),

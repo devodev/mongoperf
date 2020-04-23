@@ -17,7 +17,7 @@ type InsertOneMeta struct {
 
 // InsertOneQuery .
 type InsertOneQuery struct {
-	config *Query
+	config *Definition
 	meta   *InsertOneMeta
 }
 
@@ -32,7 +32,7 @@ func (q *InsertOneQuery) Run(ctx context.Context, col *mongo.Collection) *Result
 }
 
 // NewInsertOneQuery .
-func NewInsertOneQuery(config *Query) (Querier, error) {
+func NewInsertOneQuery(config *Definition) (Querier, error) {
 	var meta InsertOneMeta
 	if err := mapstructure.Decode(config.Meta, &meta); err != nil {
 		return nil, err

@@ -73,30 +73,31 @@ Use "mongoperf [command] --help" for more information about a command.
 ```
 
 ### Scenario Command
-Takes in a scenario configuration file and runs it.
+Takes in a scenario configuration file and runs it.</br>
+Queries are sent to workers sequentially.
 
 #### Schema
 The current schema is represented using a yaml configuration file.</br>
-It contains a single Scenario object. Here is an example:
+It contains a single Scenario object containing configuration attributes as well as query definitions.</br>
+Here is an example:
 ```
 ---
-Scenario:
-  Database: test
-  Collection: test
-  Parallel: 2
-  BufferSize: 1000
-  Queries:
-  - Name: testmany
-    Action: InsertMany
-    Repeat: 10000
-    Meta:
-      Data:
-      - Name: Ash
-        Age: 10
-        City: Pallet Town
-      - Name: Misty
-        Age: 10
-        City: Cerulean City
+Database: test
+Collection: test
+Parallel: 2
+BufferSize: 1000
+Repeat: 1000
+Queries:
+- Name: testmany
+  Action: InsertMany
+  Meta:
+    Data:
+    - Name: Ash
+      Age: 10
+      City: Pallet Town
+    - Name: Misty
+      Age: 10
+      City: Cerulean City
 ```
 
 A scenario declares the following mandatory parameters:
@@ -109,21 +110,24 @@ A scenario declares the following mandatory parameters:
   - Must be greater than 0.
 - BufferSize (int)
   - The size of the worker task queue.
-  - Must be equal or greater than 0.
+  - Must be greater than or equal to 0.
   - If 0, default value is set (1000).
+- Repeat (int)
+  - How many times should we run the queries.
+  - Must be greater than or equal to 0.
+  - If 0, repeats indefinitely.
 - Queries (List<Query>)
+  - Must contain at least one Query definition.
 
 A `Scenario` also declares a `Queries` attribute, which is a list of `Query` definition.
 ```
 ---
-Scenario:
-  ...escaped
-  Queries:
-  - Name: test
-    Action: InsertMany
-    Repeat: 2
-    Meta:
-  ...escaped
+...escaped
+Queries:
+- Name: test
+  Action: InsertMany
+  Meta:
+...escaped
 ```
 A query declares the following mandatory parameters:
 - Name (string)
@@ -135,30 +139,25 @@ A query declares the following mandatory parameters:
     - UpdateOne
     - FindOne
     - Find
-- Repeat (int)
-  - How many times should we create and send a query task to workers.
-  - Must be greater or equal to 0.
-  - If 0, infinite amount of queries will be generated.
 - Meta (Meta)
   - An object specific to the Action provided.
 
 A `Query` also declares a `Meta` object which contains the payload specific data required by the Action provided.
 ```
 ---
-Scenario:
-  ...escaped
-  Queries:
-  ...escaped
-    Meta:
-      Data:
-      - Name: Ash
-        Age: 10
-        City: Pallet Town
-      - Name: Misty
-        Age: 10
-        City: Cerulean City
-      Options:
-        Ordered: true
+...escaped
+Queries:
+...escaped
+  Meta:
+    Data:
+    - Name: Ash
+      Age: 10
+      City: Pallet Town
+    - Name: Misty
+      Age: 10
+      City: Cerulean City
+    Options:
+      Ordered: true
 ```
 
 Here is a list of schema used for each Action

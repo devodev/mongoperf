@@ -1,9 +1,9 @@
-package scenario
+package client
 
 import (
 	"fmt"
 	"io/ioutil"
-	"mongoperf/internal/scenario/query"
+	"mongoperf/internal/client/query"
 	"path/filepath"
 
 	"gopkg.in/yaml.v2"
@@ -11,11 +11,12 @@ import (
 
 // Scenario .
 type Scenario struct {
-	Database   *string       `yaml:"Database"`
-	Collection *string       `yaml:"Collection"`
-	Parallel   *int          `yaml:"Parallel,omitempty"`
-	BufferSize *int          `yaml:"BufferSize,omitempty"`
-	Queries    []query.Query `yaml:"Queries"`
+	Database   *string            `yaml:"Database"`
+	Collection *string            `yaml:"Collection"`
+	Parallel   *int               `yaml:"Parallel,omitempty"`
+	BufferSize *int               `yaml:"BufferSize,omitempty"`
+	Repeat     *int               `yaml:"Repeat,omitempty"`
+	Queries    []query.Definition `yaml:"Queries"`
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaller interface.
@@ -35,14 +36,21 @@ func (c *Scenario) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	case p == nil:
 		c.Parallel = Int(1)
 	case *p < 1:
-		return fmt.Errorf("Parallel must be greater or equal to 1")
+		return fmt.Errorf("Parallel must be greater than or equal to 1")
 	default:
 	}
 	switch s := c.BufferSize; {
 	case s == nil:
 		c.BufferSize = Int(1000)
 	case *s < 1:
-		return fmt.Errorf("BufferSize must be greater or equal to 1")
+		return fmt.Errorf("BufferSize must be greater than or equal to 1")
+	default:
+	}
+	switch s := c.Repeat; {
+	case s == nil:
+		c.Repeat = Int(1)
+	case *s < 0:
+		return fmt.Errorf("Repeat must be greater than or equal to 0")
 	default:
 	}
 	if len(c.Queries) == 0 {
@@ -51,9 +59,9 @@ func (c *Scenario) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-// ParseConfigFile returns a Config from parsing the file
+// ParseScenarioFile returns a Config from parsing the file
 // using the provided filepath.
-func ParseConfigFile(fp string) (*Scenario, error) {
+func ParseScenarioFile(fp string) (*Scenario, error) {
 	filename, err := filepath.Abs(fp)
 	if err != nil {
 		return nil, err
@@ -62,11 +70,11 @@ func ParseConfigFile(fp string) (*Scenario, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParseConfig(f)
+	return ParseScenario(f)
 }
 
-// ParseConfig returns a Config from bytes.
-func ParseConfig(b []byte) (*Scenario, error) {
+// ParseScenario returns a Config from bytes.
+func ParseScenario(b []byte) (*Scenario, error) {
 	var c Scenario
 	if err := yaml.Unmarshal(b, &c); err != nil {
 		return nil, err
