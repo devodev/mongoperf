@@ -20,7 +20,7 @@ func newCommandRoot() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "mongoperf",
 		Short:   "Run performance tests scenarios on a mongodb instance or cluster.",
-		Version: "0.1.0",
+		Version: "0.1.1",
 	}
 	cmd.AddCommand(
 		newCommandScenario(),
