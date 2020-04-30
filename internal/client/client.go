@@ -116,24 +116,19 @@ func (c *Client) RunScenario(ctx context.Context, scenario *Scenario) (map[strin
 		}()
 		var queriers []query.Querier
 		for _, def := range scenario.Queries {
-			querier, err := query.NewQuerier(&def)
+			defCopy := def
+			querier, err := query.NewQuerier(&defCopy)
 			if err != nil {
 				c.logger.Error(err)
 				continue
 			}
 			queriers = append(queriers, querier)
-			c.logger.Debugf("registered query %v with action %v", *def.Name, *def.Action)
+			c.logger.Debugf("registered query %v with action %v", *defCopy.Name, *defCopy.Action)
 		}
 
 		loops := 0
 		for {
 			for _, q := range queriers {
-				select {
-				default:
-				case <-closing:
-					return
-				}
-
 				select {
 				case dataCh <- q:
 				case <-closing:
